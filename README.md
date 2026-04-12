@@ -325,6 +325,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [simpleauthflow-chrome-extension](skills/simpleauthflow-chrome-extension/) | [install](https://skills.sh/aradotso/trending-skills/simpleauthflow-chrome-extension) | [NyxTides/SimpleAuthFlow](https://github.com/NyxTides/SimpleAuthFlow) | 2026-04-12 |
 | [shichizip-macos-archiver](skills/shichizip-macos-archiver/) | [install](https://skills.sh/aradotso/trending-skills/shichizip-macos-archiver) | [idawnlight/ShichiZip](https://github.com/idawnlight/ShichiZip) | 2026-04-12 |
 | [awesome-design-md-jp](skills/awesome-design-md-jp/) | [install](https://skills.sh/aradotso/trending-skills/awesome-design-md-jp) | [kzhrknt/awesome-design-md-jp](https://github.com/kzhrknt/awesome-design-md-jp) | 2026-04-12 |
+| [rattles-terminal-spinners](skills/rattles-terminal-spinners/) | [install](https://skills.sh/aradotso/trending-skills/rattles-terminal-spinners) | [vyfor/rattles](https://github.com/vyfor/rattles) | 2026-04-12 |
 <!-- SKILL_INDEX -->
 
 ## How it works
