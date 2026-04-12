@@ -332,6 +332,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [obsidian-ai-orange-book](skills/obsidian-ai-orange-book/) | [install](https://skills.sh/aradotso/trending-skills/obsidian-ai-orange-book) | [alchaincyf/obsidian-ai-orange-book](https://github.com/alchaincyf/obsidian-ai-orange-book) | 2026-04-12 |
 | [quien-whois-lookup](skills/quien-whois-lookup/) | [install](https://skills.sh/aradotso/trending-skills/quien-whois-lookup) | [retlehs/quien](https://github.com/retlehs/quien) | 2026-04-12 |
 | [puremac-macos-cleaner](skills/puremac-macos-cleaner/) | [install](https://skills.sh/aradotso/trending-skills/puremac-macos-cleaner) | [momenbasel/PureMac](https://github.com/momenbasel/PureMac) | 2026-04-12 |
+| [andrej-karpathy-skills-claude](skills/andrej-karpathy-skills-claude/) | [install](https://skills.sh/aradotso/trending-skills/andrej-karpathy-skills-claude) | [forrestchang/andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | 2026-04-12 |
 <!-- SKILL_INDEX -->
 
 ## How it works
