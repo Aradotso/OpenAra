@@ -346,6 +346,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [autoteam-chatgpt-rotation](skills/autoteam-chatgpt-rotation/) | [install](https://skills.sh/aradotso/trending-skills/autoteam-chatgpt-rotation) | [cnitlrt/AutoTeam](https://github.com/cnitlrt/AutoTeam) | 2026-04-13 |
 | [anything-analyzer-cdp](skills/anything-analyzer-cdp/) | [install](https://skills.sh/aradotso/trending-skills/anything-analyzer-cdp) | [Mouseww/anything-analyzer](https://github.com/Mouseww/anything-analyzer) | 2026-04-13 |
 | [capso-screenshot-macos](skills/capso-screenshot-macos/) | [install](https://skills.sh/aradotso/trending-skills/capso-screenshot-macos) | [lzhgus/Capso](https://github.com/lzhgus/Capso) | 2026-04-13 |
+| [moss-tts-nano-speech](skills/moss-tts-nano-speech/) | [install](https://skills.sh/aradotso/trending-skills/moss-tts-nano-speech) | [OpenMOSS/MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano) | 2026-04-13 |
 <!-- SKILL_INDEX -->
 
 ## How it works
