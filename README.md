@@ -336,6 +336,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [bouncer-feed-filter](skills/bouncer-feed-filter/) | [install](https://skills.sh/aradotso/trending-skills/bouncer-feed-filter) | [imbue-ai/bouncer](https://github.com/imbue-ai/bouncer) | 2026-04-13 |
 | [isolet-widget-isolation](skills/isolet-widget-isolation/) | [install](https://skills.sh/aradotso/trending-skills/isolet-widget-isolation) | [millionco/isolet](https://github.com/millionco/isolet) | 2026-04-13 |
 | [talk-normal-llm-prompt](skills/talk-normal-llm-prompt/) | [install](https://skills.sh/aradotso/trending-skills/talk-normal-llm-prompt) | [hexiecs/talk-normal](https://github.com/hexiecs/talk-normal) | 2026-04-13 |
+| [3dsvg-interactive-react](skills/3dsvg-interactive-react/) | [install](https://skills.sh/aradotso/trending-skills/3dsvg-interactive-react) | [renatoworks/3dsvg](https://github.com/renatoworks/3dsvg) | 2026-04-13 |
 <!-- SKILL_INDEX -->
 
 ## How it works
