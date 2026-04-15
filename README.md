@@ -358,6 +358,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [dflash-mlx-speculative-decoding](skills/dflash-mlx-speculative-decoding/) | [install](https://skills.sh/aradotso/trending-skills/dflash-mlx-speculative-decoding) | [bstnxbt/dflash-mlx](https://github.com/bstnxbt/dflash-mlx) | 2026-04-14 |
 | [palantir-for-family-trips](skills/palantir-for-family-trips/) | [install](https://skills.sh/aradotso/trending-skills/palantir-for-family-trips) | [andrewjiang/palantir-for-family-trips](https://github.com/andrewjiang/palantir-for-family-trips) | 2026-04-15 |
 | [openduck-distributed-duckdb](skills/openduck-distributed-duckdb/) | [install](https://skills.sh/aradotso/trending-skills/openduck-distributed-duckdb) | [CITGuru/openduck](https://github.com/CITGuru/openduck) | 2026-04-15 |
+| [llm-internals-learning](skills/llm-internals-learning/) | [install](https://skills.sh/aradotso/trending-skills/llm-internals-learning) | [amitshekhariitbhu/llm-internals](https://github.com/amitshekhariitbhu/llm-internals) | 2026-04-15 |
 <!-- SKILL_INDEX -->
 
 ## How it works
