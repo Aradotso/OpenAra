@@ -356,6 +356,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [codeburn-claude-cost-dashboard](skills/codeburn-claude-cost-dashboard/) | [install](https://skills.sh/aradotso/trending-skills/codeburn-claude-cost-dashboard) | [AgentSeal/codeburn](https://github.com/AgentSeal/codeburn) | 2026-04-14 |
 | [nothing-ever-happens-polymarket-bot](skills/nothing-ever-happens-polymarket-bot/) | [install](https://skills.sh/aradotso/trending-skills/nothing-ever-happens-polymarket-bot) | [sterlingcrispin/nothing-ever-happens](https://github.com/sterlingcrispin/nothing-ever-happens) | 2026-04-14 |
 | [dflash-mlx-speculative-decoding](skills/dflash-mlx-speculative-decoding/) | [install](https://skills.sh/aradotso/trending-skills/dflash-mlx-speculative-decoding) | [bstnxbt/dflash-mlx](https://github.com/bstnxbt/dflash-mlx) | 2026-04-14 |
+| [palantir-for-family-trips](skills/palantir-for-family-trips/) | [install](https://skills.sh/aradotso/trending-skills/palantir-for-family-trips) | [andrewjiang/palantir-for-family-trips](https://github.com/andrewjiang/palantir-for-family-trips) | 2026-04-15 |
 <!-- SKILL_INDEX -->
 
 ## How it works
