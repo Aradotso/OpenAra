@@ -365,6 +365,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [antivibe-code-learning](skills/antivibe-code-learning/) | [install](https://skills.sh/aradotso/trending-skills/antivibe-code-learning) | [mohi-devhub/antivibe](https://github.com/mohi-devhub/antivibe) | 2026-04-15 |
 | [weft-ai-language](skills/weft-ai-language/) | [install](https://skills.sh/aradotso/trending-skills/weft-ai-language) | [WeaveMindAI/weft](https://github.com/WeaveMindAI/weft) | 2026-04-16 |
 | [xata-postgres-platform](skills/xata-postgres-platform/) | [install](https://skills.sh/aradotso/trending-skills/xata-postgres-platform) | [xataio/xata](https://github.com/xataio/xata) | 2026-04-16 |
+| [designlang-design-extract](skills/designlang-design-extract/) | [install](https://skills.sh/aradotso/trending-skills/designlang-design-extract) | [Manavarya09/design-extract](https://github.com/Manavarya09/design-extract) | 2026-04-16 |
 <!-- SKILL_INDEX -->
 
 ## How it works
