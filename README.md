@@ -367,6 +367,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [xata-postgres-platform](skills/xata-postgres-platform/) | [install](https://skills.sh/aradotso/trending-skills/xata-postgres-platform) | [xataio/xata](https://github.com/xataio/xata) | 2026-04-16 |
 | [designlang-design-extract](skills/designlang-design-extract/) | [install](https://skills.sh/aradotso/trending-skills/designlang-design-extract) | [Manavarya09/design-extract](https://github.com/Manavarya09/design-extract) | 2026-04-16 |
 | [builderpulse-daily-intelligence](skills/builderpulse-daily-intelligence/) | [install](https://skills.sh/aradotso/trending-skills/builderpulse-daily-intelligence) | [BuilderPulse/BuilderPulse](https://github.com/BuilderPulse/BuilderPulse) | 2026-04-16 |
+| [hy-world-2-0-3d-world-model](skills/hy-world-2-0-3d-world-model/) | [install](https://skills.sh/aradotso/trending-skills/hy-world-2-0-3d-world-model) | [Tencent-Hunyuan/HY-World-2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0) | 2026-04-16 |
 <!-- SKILL_INDEX -->
 
 ## How it works
