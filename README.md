@@ -371,6 +371,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [html-ppt-skill](skills/html-ppt-skill/) | [install](https://skills.sh/aradotso/trending-skills/html-ppt-skill) | [lewislulu/html-ppt-skill](https://github.com/lewislulu/html-ppt-skill) | 2026-04-16 |
 | [redsun](skills/redsun/) | [install](https://skills.sh/aradotso/trending-skills/redsun) | [Nightmare-Eclipse/RedSun](https://github.com/Nightmare-Eclipse/RedSun) | 2026-04-16 |
 | [fresh-start-nirholas](skills/fresh-start-nirholas/) | [install](https://skills.sh/aradotso/trending-skills/fresh-start-nirholas) | [nirholas/fresh-start](https://github.com/nirholas/fresh-start) | 2026-04-16 |
+| [hermes-web-ui](skills/hermes-web-ui/) | [install](https://skills.sh/aradotso/trending-skills/hermes-web-ui) | [EKKOLearnAI/hermes-web-ui](https://github.com/EKKOLearnAI/hermes-web-ui) | 2026-04-16 |
 <!-- SKILL_INDEX -->
 
 ## How it works
