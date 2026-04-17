@@ -372,6 +372,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [redsun](skills/redsun/) | [install](https://skills.sh/aradotso/trending-skills/redsun) | [Nightmare-Eclipse/RedSun](https://github.com/Nightmare-Eclipse/RedSun) | 2026-04-16 |
 | [fresh-start-nirholas](skills/fresh-start-nirholas/) | [install](https://skills.sh/aradotso/trending-skills/fresh-start-nirholas) | [nirholas/fresh-start](https://github.com/nirholas/fresh-start) | 2026-04-16 |
 | [hermes-web-ui](skills/hermes-web-ui/) | [install](https://skills.sh/aradotso/trending-skills/hermes-web-ui) | [EKKOLearnAI/hermes-web-ui](https://github.com/EKKOLearnAI/hermes-web-ui) | 2026-04-16 |
+| [logo-generator-skill](skills/logo-generator-skill/) | [install](https://skills.sh/aradotso/trending-skills/logo-generator-skill) | [op7418/logo-generator-skill](https://github.com/op7418/logo-generator-skill) | 2026-04-17 |
 <!-- SKILL_INDEX -->
 
 ## How it works
