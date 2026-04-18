@@ -383,6 +383,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [tech-doc-style-chinese](skills/tech-doc-style-chinese/) | [install](https://skills.sh/aradotso/trending-skills/tech-doc-style-chinese) | [Fenng/Tech-Doc-Style-Chinese](https://github.com/Fenng/Tech-Doc-Style-Chinese) | 2026-04-18 |
 | [wx-cli-wechat-local-data](skills/wx-cli-wechat-local-data/) | [install](https://skills.sh/aradotso/trending-skills/wx-cli-wechat-local-data) | [jackwener/wx-cli](https://github.com/jackwener/wx-cli) | 2026-04-18 |
 | [wx-favorites-report](skills/wx-favorites-report/) | [install](https://skills.sh/aradotso/trending-skills/wx-favorites-report) | [zhuyansen/wx-favorites-report](https://github.com/zhuyansen/wx-favorites-report) | 2026-04-18 |
+| [btc-trading-since-2020](skills/btc-trading-since-2020/) | [install](https://skills.sh/aradotso/trending-skills/btc-trading-since-2020) | [bwjoke/BTC-Trading-Since-2020](https://github.com/bwjoke/BTC-Trading-Since-2020) | 2026-04-18 |
 <!-- SKILL_INDEX -->
 
 ## How it works
