@@ -391,6 +391,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [awesome-gpt-image-2-prompts](skills/awesome-gpt-image-2-prompts/) | [install](https://skills.sh/aradotso/trending-skills/awesome-gpt-image-2-prompts) | [EvoLinkAI/awesome-gpt-image-2-prompts](https://github.com/EvoLinkAI/awesome-gpt-image-2-prompts) | 2026-04-19 |
 | [quip-protocol-rs](skills/quip-protocol-rs/) | [install](https://skills.sh/aradotso/trending-skills/quip-protocol-rs) | [QuipNetwork/quip-protocol-rs](https://github.com/QuipNetwork/quip-protocol-rs) | 2026-04-19 |
 | [openmythos-recurrent-transformer](skills/openmythos-recurrent-transformer/) | [install](https://skills.sh/aradotso/trending-skills/openmythos-recurrent-transformer) | [kyegomez/OpenMythos](https://github.com/kyegomez/OpenMythos) | 2026-04-19 |
+| [awesome-claude-design](skills/awesome-claude-design/) | [install](https://skills.sh/aradotso/trending-skills/awesome-claude-design) | [VoltAgent/awesome-claude-design](https://github.com/VoltAgent/awesome-claude-design) | 2026-04-19 |
 <!-- SKILL_INDEX -->
 
 ## How it works
