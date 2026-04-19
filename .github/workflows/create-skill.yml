@@ -142,11 +142,16 @@ jobs:
             {
               echo "repo_full=${REPO_FULL}"
               echo "repo_name=${REPO_NAME}"
-              # Use heredoc format for values that may contain quotes, colons, or newlines
-              printf 'repo_desc<<_EOF_\n%s\n_EOF_\n' "${REPO_DESC}"
+              # Use a secure random delimiter for heredocs
+              DELIMITER="$(dd if=/dev/urandom bs=15 count=1 status=none | base64)"
+              echo "repo_desc<<${DELIMITER}"
+              echo "${REPO_DESC}"
+              echo "${DELIMITER}"
               echo "repo_lang=${REPO_LANG}"
               echo "repo_stars=${REPO_STARS}"
-              printf 'repo_topics<<_EOF_\n%s\n_EOF_\n' "${REPO_TOPICS}"
+              echo "repo_topics<<${DELIMITER}"
+              echo "${REPO_TOPICS}"
+              echo "${DELIMITER}"
               echo "stars_per_day=${STARS_PER_DAY}"
               echo "skill_slug=${SKILL_SLUG}"
             } >> "${GITHUB_OUTPUT}"
@@ -252,11 +257,15 @@ jobs:
 
           GENERATED_NAME=$(echo "${SKILL_CONTENT}" | grep -m1 '^name:' | sed 's/name: *//' | tr -d "\"'" | xargs)
           if [ -n "${GENERATED_NAME}" ]; then
-            SKILL_SLUG="${GENERATED_NAME}"
+            # Safe Slugification of generated name to prevent path traversal
+            NEW_SLUG=$(echo "${GENERATED_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')
+            if [ -n "${NEW_SLUG}" ]; then
+              SKILL_SLUG="${NEW_SLUG}"
+            fi
           fi
 
           mkdir -p "skills/${SKILL_SLUG}"
-          echo "${SKILL_CONTENT}" > "skills/${SKILL_SLUG}/SKILL.md"
+          printf "%s\n" "${SKILL_CONTENT}" > "skills/${SKILL_SLUG}/SKILL.md"
           echo "Created: skills/${SKILL_SLUG}/SKILL.md"
           echo "skill_slug=${SKILL_SLUG}" >> "${GITHUB_OUTPUT}"
 
@@ -268,7 +277,7 @@ jobs:
         run: |
           DATE=$(date +%Y-%m-%d)
 
-          if ! grep -q "${SKILL_SLUG}" README.md 2>/dev/null; then
+          if ! grep -q -e "${SKILL_SLUG}" README.md 2>/dev/null; then
             sed -i "/<!-- SKILL_INDEX -->/i | [${SKILL_SLUG}](skills/${SKILL_SLUG}/) | [install](https:\/\/skills.sh\/aradotso\/trending-skills\/${SKILL_SLUG}) | [${REPO_FULL}](https:\/\/github.com\/${REPO_FULL}) | ${DATE} |" README.md
           fi
 
