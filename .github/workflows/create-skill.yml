@@ -255,10 +255,10 @@ jobs:
             exit 1
           fi
 
-          GENERATED_NAME=$(echo "${SKILL_CONTENT}" | grep -m1 '^name:' | sed 's/name: *//' | tr -d "\"'" | xargs)
+          GENERATED_NAME=$(printf '%s\n' "${SKILL_CONTENT}" | grep -m1 '^name:' | sed 's/name: *//' | tr -d "\"'" | xargs)
           if [ -n "${GENERATED_NAME}" ]; then
             # Safe Slugification of generated name to prevent path traversal
-            NEW_SLUG=$(echo "${GENERATED_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')
+            NEW_SLUG=$(printf '%s\n' "${GENERATED_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')
             if [ -n "${NEW_SLUG}" ]; then
               SKILL_SLUG="${NEW_SLUG}"
             fi
