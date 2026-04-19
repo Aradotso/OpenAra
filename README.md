@@ -385,6 +385,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [wx-favorites-report](skills/wx-favorites-report/) | [install](https://skills.sh/aradotso/trending-skills/wx-favorites-report) | [zhuyansen/wx-favorites-report](https://github.com/zhuyansen/wx-favorites-report) | 2026-04-18 |
 | [btc-trading-since-2020](skills/btc-trading-since-2020/) | [install](https://skills.sh/aradotso/trending-skills/btc-trading-since-2020) | [bwjoke/BTC-Trading-Since-2020](https://github.com/bwjoke/BTC-Trading-Since-2020) | 2026-04-18 |
 | [browser-harness-self-healing](skills/browser-harness-self-healing/) | [install](https://skills.sh/aradotso/trending-skills/browser-harness-self-healing) | [browser-use/browser-harness](https://github.com/browser-use/browser-harness) | 2026-04-19 |
+| [diagram-design-editorial](skills/diagram-design-editorial/) | [install](https://skills.sh/aradotso/trending-skills/diagram-design-editorial) | [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) | 2026-04-19 |
 <!-- SKILL_INDEX -->
 
 ## How it works
