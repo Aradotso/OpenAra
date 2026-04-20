@@ -395,6 +395,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [freebuff2api-openai-proxy](skills/freebuff2api-openai-proxy/) | [install](https://skills.sh/aradotso/trending-skills/freebuff2api-openai-proxy) | [Quorinex/Freebuff2API](https://github.com/Quorinex/Freebuff2API) | 2026-04-20 |
 | [permiso-accessibility-permissions](skills/permiso-accessibility-permissions/) | [install](https://skills.sh/aradotso/trending-skills/permiso-accessibility-permissions) | [zats/permiso](https://github.com/zats/permiso) | 2026-04-20 |
 | [cc-design-html-prototyping](skills/cc-design-html-prototyping/) | [install](https://skills.sh/aradotso/trending-skills/cc-design-html-prototyping) | [ZeroZ-lab/cc-design](https://github.com/ZeroZ-lab/cc-design) | 2026-04-20 |
+| [create-simulated-aeronautics-mod](skills/create-simulated-aeronautics-mod/) | [install](https://skills.sh/aradotso/trending-skills/create-simulated-aeronautics-mod) | [Creators-of-Aeronautics/Simulated-Project](https://github.com/Creators-of-Aeronautics/Simulated-Project) | 2026-04-20 |
 <!-- SKILL_INDEX -->
 
 ## How it works
