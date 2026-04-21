@@ -401,6 +401,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [mdv-markdown-visualization](skills/mdv-markdown-visualization/) | [install](https://skills.sh/aradotso/trending-skills/mdv-markdown-visualization) | [drasimwagan/mdv](https://github.com/drasimwagan/mdv) | 2026-04-21 |
 | [aube-package-manager](skills/aube-package-manager/) | [install](https://skills.sh/aradotso/trending-skills/aube-package-manager) | [endevco/aube](https://github.com/endevco/aube) | 2026-04-21 |
 | [md-this-page-extension](skills/md-this-page-extension/) | [install](https://skills.sh/aradotso/trending-skills/md-this-page-extension) | [Ademking/MD-This-Page](https://github.com/Ademking/MD-This-Page) | 2026-04-21 |
+| [kami-document-design](skills/kami-document-design/) | [install](https://skills.sh/aradotso/trending-skills/kami-document-design) | [tw93/Kami](https://github.com/tw93/Kami) | 2026-04-21 |
 <!-- SKILL_INDEX -->
 
 ## How it works
