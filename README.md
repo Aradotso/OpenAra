@@ -404,6 +404,7 @@ npx skills add Aradotso/trending-skills --skill lightpanda-browser
 | [kami-document-design](skills/kami-document-design/) | [install](https://skills.sh/aradotso/trending-skills/kami-document-design) | [tw93/Kami](https://github.com/tw93/Kami) | 2026-04-21 |
 | [huashu-design-html-native](skills/huashu-design-html-native/) | [install](https://skills.sh/aradotso/trending-skills/huashu-design-html-native) | [alchaincyf/huashu-design](https://github.com/alchaincyf/huashu-design) | 2026-04-21 |
 | [gpt2api-openai-gateway](skills/gpt2api-openai-gateway/) | [install](https://skills.sh/aradotso/trending-skills/gpt2api-openai-gateway) | [432539/gpt2api](https://github.com/432539/gpt2api) | 2026-04-21 |
+| [mercury-agent-cosmicstack](skills/mercury-agent-cosmicstack/) | [install](https://skills.sh/aradotso/trending-skills/mercury-agent-cosmicstack) | [cosmicstack-labs/mercury-agent](https://github.com/cosmicstack-labs/mercury-agent) | 2026-04-22 |
 <!-- SKILL_INDEX -->
 
 ## How it works
