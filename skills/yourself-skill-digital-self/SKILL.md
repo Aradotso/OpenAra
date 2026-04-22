@@ -1,16 +1,15 @@
-```markdown
 ---
 name: yourself-skill-digital-self
-description: Create a distilled AI "digital self" skill from your chat logs, diary entries, and photos — generating a two-part persona (Self Memory + Persona Model) that thinks and speaks like you.
+description: "Distill a runnable AI persona from chat logs, diary entries, and photos using create-yourself. Use when building a digital twin, generating a Self Memory + Persona Model skill, merging new data into an existing self-skill, or managing persona versions and corrections."
 triggers:
-  - "create a digital version of myself"
-  - "distill myself into an AI skill"
-  - "build my persona skill from chat logs"
-  - "generate my self skill"
-  - "create yourself skill"
-  - "build a digital twin of me"
-  - "make an AI that talks like me"
-  - "run create-yourself"
+  - create a digital version of myself
+  - distill myself into an AI skill
+  - build my persona skill from chat logs
+  - generate my self skill
+  - create yourself skill
+  - build a digital twin of me
+  - make an AI that talks like me
+  - run create-yourself
 ---
 
 # 自己.skill (yourself-skill)
@@ -233,18 +232,6 @@ The correction is appended to `corrections.md` and takes effect immediately in t
 
 ---
 
-## Persona Tags
-
-**Personality**: 话痨 (chatterbox) · 闷骚 (outwardly reserved, secretly expressive) · 嘴硬心软 (tough outside, soft inside) · 社恐 (social anxiety) · 完美主义 · 没有安全感 · 秒回选手 (instant replier) · 已读不回 (reads without replying) · 深夜emo型 · 纠结体 · 行动派
-
-**Habits**: 早起困难户 · 咖啡依赖 · 极简主义 · 囤积癖 · 数字游民 · 仪式感狂热者
-
-**MBTI**: All 16 types supported
-
-**Zodiac**: All 12 signs supported
-
----
-
 ## Project Layout
 
 ```
@@ -310,4 +297,3 @@ create-yourself/
 ## License
 
 MIT © [Notdog](https://github.com/notdog1998)
-```

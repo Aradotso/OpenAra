@@ -1,7 +1,6 @@
-```markdown
 ---
 name: llm-architecture-gallery
-description: Source data and metadata management for the LLM Architecture Gallery, a visual catalog of large language model architectures by Sebastian Raschka.
+description: "Manage models.yml entries and architecture images for Sebastian Raschka's LLM Architecture Gallery. Use when adding a new model entry, updating model metadata, contributing architecture diagrams, or querying the gallery's YAML schema."
 triggers:
   - add a model to the LLM architecture gallery
   - update models.yml for the architecture gallery
@@ -211,31 +210,6 @@ for name, meta in moe_models.items():
     print(f"{name}: {meta.get('architecture')} — {meta.get('parameters', '?')}")
 ```
 
-### Python — generate a Markdown index
-
-```python
-import yaml
-
-with open("models.yml") as f:
-    models = yaml.safe_load(f)
-
-BASE_URL = "https://sebastianraschka.com"
-
-lines = ["# Model Index\n"]
-for name, meta in sorted(models.items(), key=lambda kv: kv[1].get("date", "")):
-    img_url = BASE_URL + meta["image"]
-    paper = meta.get("paper", "")
-    date = meta.get("date", "")
-    params = meta.get("parameters", "")
-    org = meta.get("organization", "")
-    line = f"- **{name}** ({date}) {org} {params}"
-    if paper:
-        line += f" — [paper]({paper})"
-    lines.append(line)
-
-print("\n".join(lines))
-```
-
 ### Python — add a new model entry programmatically
 
 ```python
@@ -293,37 +267,6 @@ if issues:
     print("\n".join(issues))
 else:
     print(f"All {len(models)} entries valid.")
-```
-
-### List all unique organizations
-
-```python
-import yaml
-
-with open("models.yml") as f:
-    models = yaml.safe_load(f)
-
-orgs = sorted({m.get("organization", "Unknown") for m in models.values()})
-for org in orgs:
-    print(org)
-```
-
-### Count models by architecture family
-
-```python
-import yaml
-from collections import Counter
-
-with open("models.yml") as f:
-    models = yaml.safe_load(f)
-
-arch_counts = Counter(
-    m.get("architecture", "Unknown").split("(")[0].strip()
-    for m in models.values()
-)
-
-for arch, count in arch_counts.most_common():
-    print(f"{count:3d}  {arch}")
 ```
 
 ---
@@ -385,4 +328,3 @@ date: 2025-01-20
 | Validate YAML | `python3 -c "import yaml; yaml.safe_load(open('models.yml'))"` |
 | Primary data file | `models.yml` |
 | License | Apache-2.0 |
-```

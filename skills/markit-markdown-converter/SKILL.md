@@ -1,6 +1,6 @@
 ---
 name: markit-markdown-converter
-description: Convert files, URLs, and media to markdown using the markit-ai CLI and SDK with pluggable converters and LLM support.
+description: "Convert files, URLs, and media to markdown using the markit-ai CLI and SDK. Use when converting PDFs, DOCX, HTML, images, or audio to markdown, scraping web pages to markdown, writing markit plugins, or configuring LLM-powered extraction."
 triggers:
   - convert PDF to markdown
   - turn a DOCX into markdown
@@ -195,64 +195,13 @@ const markit = new Markit({
 const { markdown } = await markit.convertFile("photo.jpg");
 ```
 
-### With Anthropic for Vision
-
-```typescript
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
-import { Markit } from "markit-ai";
-
-const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
-const openai = new OpenAI();       // reads OPENAI_API_KEY from env
-
-// Mix providers: Claude for images, OpenAI Whisper for audio
-const markit = new Markit({
-  describe: async (image: Buffer, mime: string) => {
-    const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mime as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                data: image.toString("base64"),
-              },
-            },
-            { type: "text", text: "Describe this image." },
-          ],
-        },
-      ],
-    });
-    return (res.content[0] as { text: string }).text;
-  },
-
-  transcribe: async (audio: Buffer, mime: string) => {
-    const res = await openai.audio.transcriptions.create({
-      model: "gpt-4o-mini-transcribe",
-      file: new File([audio], "audio.mp3", { type: mime }),
-    });
-    return res.text;
-  },
-});
-```
-
 ### Using Built-in Providers via Config
 
 ```typescript
 import { Markit, createLlmFunctions, loadConfig, loadAllPlugins } from "markit-ai";
 
-// Reads .markit/config.json and env vars automatically
 const config = loadConfig();
-
-// Load any installed plugins
 const plugins = await loadAllPlugins();
-
-// Create instance with built-in providers + plugins
 const markit = new Markit(createLlmFunctions(config), plugins);
 
 const { markdown } = await markit.convertFile("report.pdf");
@@ -262,9 +211,7 @@ const { markdown } = await markit.convertFile("report.pdf");
 
 ## Writing a Plugin
 
-Plugins let you add new formats or override built-in converters. Plugin converters run before built-ins.
-
-### Basic Converter Plugin
+Plugins add new formats or override built-in converters. Plugin converters run before built-ins.
 
 ```typescript
 // my-plugin.ts
@@ -279,82 +226,16 @@ export default function (api: MarkitPluginAPI) {
       name: "myformat",
       accepts: (info) => [".myf", ".myfmt"].includes(info.extension ?? ""),
       convert: async (input: Buffer, info) => {
-        // info.extension, info.mimeType, info.fileName available
         const text = input.toString("utf-8");
-        const markdown = `# Converted\n\n\`\`\`\n${text}\n\`\`\``;
-        return { markdown };
+        return { markdown: `# Converted\n\n\`\`\`\n${text}\n\`\`\`` };
       },
     },
-    // Optional: declare so it appears in `markit formats`
     { name: "My Format", extensions: [".myf", ".myfmt"] },
   );
 }
 ```
 
-### Override a Built-in Converter
-
-```typescript
-// better-pdf-plugin.ts
-import type { MarkitPluginAPI } from "markit-ai";
-
-export default function (api: MarkitPluginAPI) {
-  api.setName("better-pdf");
-  api.setVersion("1.0.0");
-
-  // Runs before built-in PDF converter, effectively replacing it
-  api.registerConverter({
-    name: "pdf",
-    accepts: (info) => info.extension === ".pdf",
-    convert: async (input: Buffer, info) => {
-      // Custom PDF extraction logic
-      const markdown = `# PDF Content\n\n(extracted with custom logic)`;
-      return { markdown };
-    },
-  });
-}
-```
-
-### Register a Custom LLM Provider
-
-```typescript
-import type { MarkitPluginAPI } from "markit-ai";
-
-export default function (api: MarkitPluginAPI) {
-  api.setName("gemini-provider");
-
-  api.registerProvider({
-    name: "gemini",
-    envKeys: ["GOOGLE_API_KEY"],
-    defaultBase: "https://generativelanguage.googleapis.com/v1beta",
-    defaultModel: "gemini-2.0-flash",
-    create: (config, prompt) => ({
-      describe: async (image: Buffer, mime: string) => {
-        // Call Gemini API here
-        return "Image description from Gemini";
-      },
-    }),
-  });
-}
-```
-
-### Install and Use a Plugin
-
-```bash
-# Install from file
-markit plugin install ./my-plugin.ts
-
-# Install from npm
-markit plugin install npm:markit-plugin-dwg
-
-# Install from git
-markit plugin install git:github.com/user/markit-plugin-ocr
-
-# Verify
-markit plugin list
-
-# Remove
-markit plugin remove my-format
-```
+Manage plugins via CLI: `markit plugin install <source>`, `markit plugin list`, `markit plugin remove <name>`. Sources: local path, `npm:<pkg>`, or `git:<repo>`.
 
 ---
 
@@ -381,30 +262,6 @@ for (const file of files) {
   const outName = basename(file, ext) + ".md";
   writeFileSync(join(outputDir, outName), markdown);
   console.log(`Converted: ${file} → ${outName}`);
-}
-```
-
-### Convert URL List
-
-```typescript
-import { Markit } from "markit-ai";
-
-const markit = new Markit();
-const urls = [
-  "https://example.com/article-1",
-  "https://example.com/article-2",
-  "https://en.wikipedia.org/wiki/TypeScript",
-];
-
-const results = await Promise.all(
-  urls.map(async (url) => {
-    const { markdown } = await markit.convertUrl(url);
-    return { url, markdown };
-  })
-);
-
-for (const { url, markdown } of results) {
-  console.log(`\n## ${url}\n\n${markdown.slice(0, 200)}...`);
 }
 ```
 

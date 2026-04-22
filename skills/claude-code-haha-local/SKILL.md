@@ -1,7 +1,6 @@
-```markdown
 ---
-name: claude-code-haha-local
-description: Run the leaked Claude Code source locally with any Anthropic-compatible API endpoint
+name: cc-haha-local-runner
+description: "Run the patched Claude Code source locally with any Anthropic-compatible API endpoint (MiniMax, OpenRouter, etc.). Use when setting up claude-code-haha, configuring custom API providers, troubleshooting TUI startup issues, or running headless print-mode queries."
 triggers:
   - set up claude code haha locally
   - run claude code from source
@@ -330,4 +329,3 @@ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 ## Disclaimer
 
 This project is based on Claude Code source code that leaked from Anthropic's npm registry. All original source code copyright belongs to [Anthropic](https://www.anthropic.com). For educational and research use only.
-```

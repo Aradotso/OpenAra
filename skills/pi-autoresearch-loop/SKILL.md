@@ -1,7 +1,6 @@
-```markdown
 ---
 name: pi-autoresearch-loop
-description: Autonomous experiment loop for pi that continuously tries optimizations, measures results, and keeps what works
+description: "Autonomous experiment loop extension for pi that proposes changes, benchmarks them, commits wins, and reverts losses. Use when setting up continuous optimization for test speed, bundle size, build time, or any measurable metric via autoresearch."
 triggers:
   - autoresearch
   - autonomous experiment loop
@@ -337,27 +336,6 @@ Or use the skill:
 
 ---
 
-## Architecture
-
-```
-┌──────────────────────┐     ┌──────────────────────────┐
-│  Extension (global)  │     │  Skill (per-domain)       │
-│                      │     │                           │
-│  run_experiment      │◄────│  command: pnpm test       │
-│  log_experiment      │     │  metric: seconds (lower)  │
-│  widget + dashboard  │     │  scope: vitest configs    │
-│                      │     │  ideas: pool, parallel…   │
-└──────────────────────┘     └──────────────────────────┘
-         │
-         ▼
-  autoresearch.jsonl   ← append-only run log
-  autoresearch.md      ← living session document
-```
-
-The **extension** is domain-agnostic infrastructure. The **skill** encodes domain knowledge. One extension serves unlimited domains.
-
----
-
 ## Troubleshooting
 
 **Loop not starting after skill runs**
@@ -393,4 +371,3 @@ The **extension** is domain-agnostic infrastructure. The **skill** encodes domai
 ## License
 
 MIT
-```
