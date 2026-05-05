@@ -283,10 +283,19 @@ function resolveNativeExecutable() {
   }
 
   if (process.platform === "darwin") {
-    // Prefer the auto-updated bundle in ~/.openara/current. The background
-    // updater (scripts/auto-update.mjs) keeps this fresh against npm latest,
-    // so users who haven't run \`npm install -g\` recently still get the
-    // newest published version automatically.
+    // Prefer /Applications/OpenAra.app — it is the only path that surfaces
+    // as a manageable entry in System Settings → Privacy & Security, and
+    // the path that \`openara doctor\`'s stale-grant classifier treats as
+    // canonical. The background auto-updater (scripts/auto-update.mjs)
+    // keeps this copy fresh when /Applications is writable.
+    //
+    // Fall back to ~/.openara/current only when /Applications is missing
+    // (e.g. /Applications is read-only on this account, or postinstall
+    // was skipped via --ignore-scripts). Apps under ~/.openara/current
+    // never appear in the Privacy panel toggle list and can only obtain
+    // TCC permission via responsible-process inheritance from the parent
+    // agent, which is fragile.
+    const installedAppExecutable = "/Applications/OpenAra.app/Contents/MacOS/OpenAra";
     const homeUpdatedExecutable = path.join(
       homeCurrentLink,
       "dist",
@@ -295,13 +304,22 @@ function resolveNativeExecutable() {
       "MacOS",
       "OpenAra",
     );
-    if (fs.existsSync(homeUpdatedExecutable)) {
+    // The auto-updater writes ~/.openara/prefer-home-current when it fails
+    // to refresh /Applications/OpenAra.app (read-only volume, denied perms,
+    // hardened-bundle protection, …). When the marker is present and the
+    // home-current copy actually exists, use it so the user runs the
+    // freshly-staged version instead of a stale /Applications/ copy.
+    const preferHomeMarker = path.join(homeOpenaraRoot, "prefer-home-current");
+    if (fs.existsSync(preferHomeMarker) && fs.existsSync(homeUpdatedExecutable)) {
       return homeUpdatedExecutable;
     }
 
-    const installedAppExecutable = "/Applications/OpenAra.app/Contents/MacOS/OpenAra";
     if (fs.existsSync(installedAppExecutable)) {
       return installedAppExecutable;
+    }
+
+    if (fs.existsSync(homeUpdatedExecutable)) {
+      return homeUpdatedExecutable;
     }
   }
 
@@ -405,9 +423,16 @@ function renderAutoUpdater(packageName) {
 // Background auto-updater for ${packageName}.
 // Spawned detached + stdio:ignore from bin/openara, so it never affects the
 // foreground process (including MCP stdio). On a fresh release it downloads
-// the new tarball into ~/.openara/versions/<v>/ and atomically swaps the
-// ~/.openara/current symlink. The next "openara" invocation picks up the new
-// bundle automatically — no sudo, no \`npm install -g\` re-run.
+// the new tarball into ~/.openara/versions/<v>/, atomically replaces
+// /Applications/OpenAra.app with the staged copy when /Applications is
+// writable, and updates the ~/.openara/current fallback symlink. The next
+// "openara" invocation picks up the new bundle automatically — no sudo,
+// no \`npm install -g\` re-run.
+//
+// Why /Applications first: only that path surfaces as a manageable entry
+// in System Settings → Privacy & Security. The ~/.openara/current copy
+// kept around as a fallback for users whose /Applications is read-only
+// (rare) or whose npm install ran with --ignore-scripts.
 //
 // Disable via OPENARA_AUTO_UPDATE=off.
 
@@ -428,6 +453,11 @@ const downloadsDir = path.join(root, "downloads");
 const checkFile = path.join(root, "update-check.json");
 const logFile = path.join(root, "update.log");
 const currentLink = path.join(root, "current");
+// Read by bin/openara to decide whether to prefer ~/.openara/current over
+// /Applications/OpenAra.app. Created when refreshApplicationsCopy fails
+// (so the user runs the freshly-staged copy instead of a stale one),
+// removed on a successful refresh.
+const preferHomeMarker = path.join(root, "prefer-home-current");
 
 const installedVersion = process.argv[2] || "0.0.0";
 
@@ -507,6 +537,95 @@ function swapSymlink(targetVersionDir) {
   fs.renameSync(tmpLink, currentLink);
 }
 
+// Best-effort refresh of /Applications/OpenAra.app from a staged bundle.
+// Stages a sibling copy via cp -R, then atomically renames the old bundle
+// aside, renames the new one in, and removes the old. lsregister is poked
+// so Launch Services updates its bundle-id -> path mapping.
+//
+// All failures (permission denied, hardened-bundle protection, etc.) are
+// logged and swallowed: the launcher's ~/.openara/current fallback still
+// points at the freshly-extracted bundle, so updates aren't lost.
+function setPreferHomeMarker(reason) {
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(preferHomeMarker, JSON.stringify({ reason, at: Date.now() }, null, 2));
+  } catch (_) {}
+}
+
+function clearPreferHomeMarker() {
+  try { fs.unlinkSync(preferHomeMarker); } catch (_) {}
+}
+
+function refreshApplicationsCopy(stagedApp) {
+  const target = "/Applications/OpenAra.app";
+  const stagingPath = path.join("/Applications", \`.OpenAra.app.staging-\${process.pid}\`);
+  const oldPath = path.join("/Applications", \`.OpenAra.app.old-\${process.pid}\`);
+  const lsregister = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister";
+
+  try {
+    fs.accessSync("/Applications", fs.constants.W_OK);
+  } catch (_) {
+    log("/Applications not writable; skipping refresh (launcher will use ~/.openara/current)");
+    setPreferHomeMarker("applications-not-writable");
+    return;
+  }
+
+  let oldRelocated = false;
+  try {
+    fs.rmSync(stagingPath, { recursive: true, force: true });
+    const cpResult = spawnSync("/bin/cp", ["-R", stagedApp, stagingPath], { stdio: "ignore" });
+    if (cpResult.status !== 0) {
+      log(\`cp -R into /Applications staging failed status=\${cpResult.status}\`);
+      fs.rmSync(stagingPath, { recursive: true, force: true });
+      setPreferHomeMarker("cp-staging-failed");
+      return;
+    }
+
+    if (fs.existsSync(target)) {
+      try {
+        fs.rmSync(oldPath, { recursive: true, force: true });
+        fs.renameSync(target, oldPath);
+        oldRelocated = true;
+      } catch (err) {
+        log(\`could not rename existing /Applications/OpenAra.app aside: \${err.message}\`);
+        fs.rmSync(stagingPath, { recursive: true, force: true });
+        setPreferHomeMarker("rename-existing-failed");
+        return;
+      }
+    }
+
+    try {
+      fs.renameSync(stagingPath, target);
+    } catch (err) {
+      log(\`rename staging -> /Applications/OpenAra.app failed: \${err.message}\`);
+      if (oldRelocated) {
+        try { fs.renameSync(oldPath, target); } catch (_) {}
+      }
+      fs.rmSync(stagingPath, { recursive: true, force: true });
+      setPreferHomeMarker("rename-staging-failed");
+      return;
+    }
+
+    if (oldRelocated) {
+      fs.rmSync(oldPath, { recursive: true, force: true });
+    }
+
+    if (fs.existsSync(lsregister)) {
+      spawnSync(lsregister, ["-f", target], { stdio: "ignore" });
+    }
+
+    clearPreferHomeMarker();
+    log("refreshed /Applications/OpenAra.app");
+  } catch (err) {
+    log(\`refresh /Applications failed: \${(err && err.message) || err}\`);
+    try { fs.rmSync(stagingPath, { recursive: true, force: true }); } catch (_) {}
+    if (oldRelocated && !fs.existsSync(target)) {
+      try { fs.renameSync(oldPath, target); } catch (_) {}
+    }
+    setPreferHomeMarker("unexpected-error");
+  }
+}
+
 function cleanupOldVersions(keepVersion) {
   try {
     for (const entry of fs.readdirSync(versionsDir)) {
@@ -560,6 +679,7 @@ async function main() {
   const targetApp = path.join(targetVersionDir, "dist", "OpenAra.app");
   if (fs.existsSync(path.join(targetApp, "Contents", "Info.plist"))) {
     swapSymlink(targetVersionDir);
+    refreshApplicationsCopy(targetApp);
     writeCheck({ checkedAt: Date.now(), installedVersion, latestVersion, stagedAt: Date.now() });
     log(\`re-linked to already-staged \${latestVersion}\`);
     return;
@@ -608,6 +728,7 @@ async function main() {
   fs.renameSync(stagingDir, targetVersionDir);
 
   swapSymlink(targetVersionDir);
+  refreshApplicationsCopy(path.join(targetVersionDir, "dist", "OpenAra.app"));
   cleanupOldVersions(latestVersion);
   try { fs.unlinkSync(tarballPath); } catch (_) {}
 

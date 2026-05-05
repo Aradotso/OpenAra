@@ -29,6 +29,7 @@ enum OpenAraMain {
 
         switch command {
         case .mcp:
+            surfaceOnboardingIfPermissionsMissing()
             let service = ComputerUseService()
             let server = StdioMCPServer(service: service)
             if VisualCursorSupport.isEnabled {
@@ -117,6 +118,58 @@ enum OpenAraMain {
 
     private static func writeToStandardError(_ message: String) {
         OpenAraLogger.error(message, category: "cli")
+    }
+
+    /// Called from the MCP entry point. If permissions are missing, log a
+    /// stderr-friendly message (MCP clients surface stderr to the user) and
+    /// spawn `openara launch-onboarding` as a detached child so the GUI
+    /// onboarding window appears. We deliberately do NOT block — the MCP
+    /// server still starts so the client can finish initializing; tool calls
+    /// that need permissions will fail clearly until granted.
+    ///
+    /// Skipped when another OpenAra GUI process is already running, so a
+    /// fast-cycling MCP client can't spawn five onboarding windows.
+    private static func surfaceOnboardingIfPermissionsMissing() {
+        let permissions = PermissionDiagnostics.current()
+        guard !permissions.allGranted else { return }
+
+        let missing = permissions.missingPermissions
+            .map(\.title)
+            .joined(separator: ", ")
+        OpenAraLogger.warn(
+            "OpenAra is missing permissions (\(missing)). Launching onboarding window. Tool calls that need these permissions will fail until they are granted in System Settings → Privacy & Security.",
+            category: "mcp-startup"
+        )
+
+        let alreadyRunning = NSWorkspace.shared.runningApplications.contains { app in
+            guard let id = app.bundleIdentifier else { return false }
+            return PermissionSupport.isOpenAraBundleIdentifier(id) && app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        }
+        if alreadyRunning {
+            return
+        }
+
+        guard let executableURL = Bundle.main.executableURL else { return }
+
+        let process = Process()
+        process.executableURL = executableURL
+        // No args -> .launchOnboarding (parseOpenAraCLI returns this when
+        // the argument list is empty). The child runs NSApplication.run()
+        // and shows the onboarding window.
+        process.arguments = []
+        process.environment = ProcessInfo.processInfo.environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+        } catch {
+            OpenAraLogger.error(
+                "could not spawn onboarding child: \(error.localizedDescription)",
+                category: "mcp-startup"
+            )
+        }
     }
 
     private static func formatTriState(_ value: Bool?) -> String {
