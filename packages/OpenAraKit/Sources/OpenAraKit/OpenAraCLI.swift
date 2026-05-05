@@ -2,6 +2,7 @@ import Foundation
 
 public enum OpenAraCLICommand: Equatable {
     case launchOnboarding
+    case permissionTray(SystemPermissionKind)
     case mcp
     case doctor
     case listApps
@@ -85,6 +86,8 @@ public func parseOpenAraCLI(arguments: [String]) throws -> OpenAraCLICommand {
         // naturally — without this alias the parser would say "Unknown command:
         // launch-onboarding" and exit before ever showing the onboarding window.
         return try parseSimpleCommand(name: "launch-onboarding", arguments: Array(arguments.dropFirst()), result: .launchOnboarding)
+    case "permission-tray", "tray":
+        return try parsePermissionTray(arguments: Array(arguments.dropFirst()))
     default:
         if first.hasPrefix("-") {
             throw OpenAraCLIError(message: "Unknown option: \(first)", helpCommand: nil)
@@ -115,6 +118,7 @@ public func openAraHelpText(command: String? = nil) -> String {
           update               Upgrade to the latest @openara/cli on npm.
           uninstall            Remove /Applications/OpenAra.app and reset bundle-id TCC entries.
           reset-permissions    Clear OpenAra TCC entries without removing the app.
+          permission-tray <kind>  Show only the floating drag-to-grant helper beside System Settings.
           help [command]       Show general or command-specific help.
           version              Print the CLI version.
 
@@ -221,6 +225,28 @@ public func openAraHelpText(command: String? = nil) -> String {
           openara -v
 
         Print the CLI version.
+        """
+    case "permission-tray":
+        return """
+        Usage:
+          openara permission-tray <kind>
+
+        Show only the floating drag-to-grant helper that follows the System
+        Settings window. Skips the full onboarding window — useful when a host
+        app (e.g. Ara Desktop) already has its own permissions UI and just wants
+        to surface the polished drag-tile beside Settings.
+
+        Kinds:
+          accessibility        Accessibility privacy pane.
+          screen-recording     Screen & System Audio Recording privacy pane.
+
+        The process opens the relevant Privacy pane, shows the floating panel
+        while System Settings is frontmost, and self-terminates as soon as the
+        requested permission is granted.
+
+        Honors the same env vars as `openara` (no args):
+          OPENARA_BRAND_NAME       Override "OpenAra" in the panel copy.
+          OPENARA_BRAND_ICON_PATH  Path to a host .app bundle whose icon is used.
         """
     case "help":
         return """
@@ -435,6 +461,39 @@ private func parseUninstall(arguments: [String]) throws -> OpenAraCLICommand {
     }
 
     return .uninstall(includeLegacy: includeLegacy)
+}
+
+private func parsePermissionTray(arguments: [String]) throws -> OpenAraCLICommand {
+    if arguments.count == 1, let option = arguments.first, option == "-h" || option == "--help" {
+        return .help(command: "permission-tray")
+    }
+
+    guard let kindArg = arguments.first, !kindArg.hasPrefix("-") else {
+        throw OpenAraCLIError(
+            message: "permission-tray requires a permission kind (accessibility | screen-recording)",
+            helpCommand: "permission-tray"
+        )
+    }
+
+    if arguments.count > 1 {
+        throw OpenAraCLIError(
+            message: "permission-tray accepts exactly one <kind> argument",
+            helpCommand: "permission-tray"
+        )
+    }
+
+    let normalized = kindArg.lowercased()
+    switch normalized {
+    case "accessibility", "ax", "a11y":
+        return .permissionTray(.accessibility)
+    case "screen-recording", "screenrecording", "screen", "screencapture", "screen-capture", "sr":
+        return .permissionTray(.screenRecording)
+    default:
+        throw OpenAraCLIError(
+            message: "permission-tray: unknown kind '\(kindArg)'. Expected accessibility | screen-recording.",
+            helpCommand: "permission-tray"
+        )
+    }
 }
 
 private func parseResetPermissions(arguments: [String]) throws -> OpenAraCLICommand {

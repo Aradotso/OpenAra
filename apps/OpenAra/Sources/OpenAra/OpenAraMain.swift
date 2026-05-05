@@ -88,6 +88,8 @@ enum OpenAraMain {
             try runResetPermissions(includeLegacy: includeLegacy, includeDev: includeDev)
         case .update:
             try runUpdate()
+        case let .permissionTray(kind):
+            PermissionTrayApp.launch(kind: kind)
         case .launchOnboarding:
             let permissions = PermissionDiagnostics.current()
             let forceOnboarding = ProcessInfo.processInfo.environment["OPENARA_FORCE_ONBOARDING"] == "1"

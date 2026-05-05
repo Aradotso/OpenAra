@@ -21,6 +21,90 @@ enum PermissionOnboardingApp {
     }
 }
 
+/// Tray-only mode. Skips the full onboarding window and shows only the
+/// floating accessory NSPanel beside System Settings. Used by hosts that
+/// already have their own permission UI but want to surface OpenAra's
+/// polished drag-to-grant helper for the brief moment the user is in
+/// System Settings → Privacy & Security.
+///
+/// Self-terminates as soon as `PermissionDiagnostics` reports the requested
+/// permission is granted, or when the user clicks the panel's back button.
+@MainActor
+enum PermissionTrayApp {
+    static func launch(kind: SystemPermissionKind) {
+        // If the permission is already granted, there is nothing to do — just
+        // open Settings (so the user has visibility into the current grant)
+        // and exit. Hosts that want to force the panel anyway can set
+        // OPENARA_FORCE_ONBOARDING=1 — the panel observes the same flag via
+        // PermissionDiagnostics and won't auto-terminate immediately.
+        let force = ProcessInfo.processInfo.environment["OPENARA_FORCE_ONBOARDING"] == "1"
+        if !force && PermissionDiagnostics.current().isGranted(kind) {
+            PermissionSupport.openSystemSettings(for: kind)
+            return
+        }
+
+        let application = NSApplication.shared
+        application.setActivationPolicy(.accessory)
+        application.applicationIconImage = Branding.makeAppIconImage(size: 256)
+
+        let delegate = PermissionTrayAppDelegate(kind: kind)
+        application.delegate = delegate
+        application.run()
+    }
+}
+
+@MainActor
+final class PermissionTrayAppDelegate: NSObject, NSApplicationDelegate {
+    private let kind: SystemPermissionKind
+    private var panelController: PermissionAccessoryPanelController?
+    private var pollTimer: Timer?
+    private let pollInterval: TimeInterval = 0.4
+
+    init(kind: SystemPermissionKind) {
+        self.kind = kind
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Trigger the system-side permission machinery so the host app shows
+        // up in the relevant Privacy list, then deeplink straight there. The
+        // accessory panel observes System Settings frontmost-ness and will
+        // present itself once Settings comes to front.
+        if kind == .accessibility {
+            PermissionSupport.requestAccessibilityPrompt()
+        }
+        PermissionSupport.openSystemSettings(for: kind)
+
+        let controller = PermissionAccessoryPanelController { [weak self] in
+            // Back button -> the host's onboarding is the source of truth, so
+            // just terminate. Settings stays open for the user to finish
+            // manually if they choose.
+            self?.terminate()
+        }
+        panelController = controller
+        controller.show(for: kind, sourceFrameInScreen: nil)
+
+        pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if PermissionDiagnostics.current().isGranted(self.kind) {
+                    self.terminate()
+                }
+            }
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    private func terminate() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+        panelController?.hide()
+        NSApp.terminate(nil)
+    }
+}
+
 @MainActor
 final class PermissionOnboardingAppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: PermissionWindowController?
