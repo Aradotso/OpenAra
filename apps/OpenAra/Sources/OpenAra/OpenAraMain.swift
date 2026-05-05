@@ -131,7 +131,15 @@ enum OpenAraMain {
     ///
     /// Skipped when another OpenAra GUI process is already running, so a
     /// fast-cycling MCP client can't spawn five onboarding windows.
+    ///
+    /// Also skipped when the host has set OPENARA_SUPPRESS_AUTO_ONBOARDING=1.
+    /// Hosts that embed OpenAra (e.g. Ara Desktop) own their own permission
+    /// UI and don't want a parallel "Enable OpenAra" window competing with it.
     private static func surfaceOnboardingIfPermissionsMissing() {
+        if ProcessInfo.processInfo.environment["OPENARA_SUPPRESS_AUTO_ONBOARDING"] == "1" {
+            return
+        }
+
         let permissions = PermissionDiagnostics.current()
         guard !permissions.allGranted else { return }
 
