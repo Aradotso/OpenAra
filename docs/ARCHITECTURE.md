@@ -14,7 +14,7 @@ paths before falling back to coordinate-level HID input.
 - `packages/OpenAraKit/` — the shared library. Tools live under `Sources/OpenAraKit/Tools/`, one struct per tool. Other modules cover MCP transport, app discovery, accessibility / window snapshots, input simulation, the visible cursor overlay, the fixture test bridge, and the public `OpenAraLogger` API.
 - `experiments/CursorMotion/` — standalone Swift cursor-motion lab. Used to tune the heading-driven motion model and pose dynamics without coupling to the MCP runtime.
 - `experiments/StandaloneCursor/` — Swift cursor viewer that reuses the candidate paths, scoring, and raw spring timeline derived from `scripts/cursor-motion-re/official_cursor_motion.py`. Helpful for comparison with the official binary.
-- `scripts/` — repo-level build / smoke / install scripts plus `scripts/computer-use-cli/`, a Go helper for probing the official bundled `computer-use` binary.
+- `scripts/` — repo-level build, smoke, and install scripts.
 - `docs/` — architecture, reliability, CI/CD, release notes, exec plans, and the reverse-engineering reference notes.
 
 ## Runtime layers
@@ -78,7 +78,7 @@ paths before falling back to coordinate-level HID input.
 ## Non-goals / boundaries
 
 - We do not reproduce the closed-source binary's caller signing, private IPC, full overlay choreography, or self-installing plugin behavior.
-- `SkyComputerUseClient` (Apple-side, in the official bundle) has launch constraints that can kill an unsigned stdio client. To probe the official bundled `computer-use`, `scripts/computer-use-cli`'s app-server mode is suitable for tool-list and protocol-shape inspection only — official `1.0.755` real tool calls run through service-side sender authorization that even a signed Codex binary may fail (`Sender process is not authenticated`). For real official-tool use, drive Codex; for direct connectivity, use OpenAra's MCP server.
+- `SkyComputerUseClient` (Apple-side, in the official bundle) has launch constraints that can kill an unsigned stdio client. For direct connectivity to a Computer Use surface from your own code, use OpenAra's MCP server.
 - The current onboarding has a working app, deep links, drag-target panel, official-style accessory entrance and back affordance. The click pipeline has the visible cursor, official asset fallback, and target-window-relative ordering (re-asserted while the overlay is visible so user-activated foreground apps don't cover it). It does not yet reproduce the official binary's full embedded choreography / host integration / session-approval UX.
 - Screenshots are captured via `ScreenCaptureKit` and returned directly as MCP `image` content blocks (base64 PNG); they are not written to the repo or temp directories.
 - Session state is per-process in-memory: most-recent snapshot + `element_index` map, per app.
