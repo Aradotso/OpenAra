@@ -1102,7 +1102,14 @@ final class DraggableAppTileView: NSView, NSDraggingSource {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let bundleURL = PermissionSupport.currentAppBundleURL() else {
+        // Honor the host-brand-bundle override so the user drops Ara Desktop
+        // (not OpenAra) into the Privacy list when AraDesktop is the host.
+        let overridePath = ProcessInfo.processInfo.environment["OPENARA_BRAND_ICON_PATH"]
+        let overrideURL: URL? = {
+            guard let p = overridePath, !p.isEmpty, FileManager.default.fileExists(atPath: p) else { return nil }
+            return URL(fileURLWithPath: p)
+        }()
+        guard let bundleURL = overrideURL ?? PermissionSupport.currentAppBundleURL() else {
             NSSound.beep()
             return
         }
@@ -1118,6 +1125,16 @@ final class DraggableAppTileView: NSView, NSDraggingSource {
     }
 
     private func currentIcon() -> NSImage {
+        // Hosts that embed OpenAra (e.g. AraDesktop) point this at their own .app
+        // so the floating drag-tile shows the host's brand icon — not OpenAra's
+        // hexagon — even when the bundle-URL resolver can't otherwise see the host.
+        if let overridePath = ProcessInfo.processInfo.environment["OPENARA_BRAND_ICON_PATH"],
+           !overridePath.isEmpty,
+           FileManager.default.fileExists(atPath: overridePath)
+        {
+            return NSWorkspace.shared.icon(forFile: overridePath)
+        }
+
         if let bundleURL = PermissionSupport.currentAppBundleURL() {
             if let bundle = Bundle(url: bundleURL),
                PermissionSupport.isOpenAraBundleIdentifier(bundle.bundleIdentifier)
@@ -1257,7 +1274,19 @@ final class GradientBackgroundView: NSView {
 final class AppGlyphView: NSImageView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        image = Branding.makeAppIconImage(size: PermissionOnboardingLayout.headerIconSize)
+        // Match draggable-tile branding: prefer the host's icon when a host
+        // (e.g. AraDesktop) sets OPENARA_BRAND_ICON_PATH, fall back to the
+        // OpenAra hexagon otherwise.
+        if let overridePath = ProcessInfo.processInfo.environment["OPENARA_BRAND_ICON_PATH"],
+           !overridePath.isEmpty,
+           FileManager.default.fileExists(atPath: overridePath) {
+            let icon = NSWorkspace.shared.icon(forFile: overridePath)
+            icon.size = NSSize(width: PermissionOnboardingLayout.headerIconSize,
+                               height: PermissionOnboardingLayout.headerIconSize)
+            image = icon
+        } else {
+            image = Branding.makeAppIconImage(size: PermissionOnboardingLayout.headerIconSize)
+        }
     }
 
     @available(*, unavailable)
