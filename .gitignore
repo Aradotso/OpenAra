@@ -8,3 +8,8 @@ artifacts/codex-dumps/
 research/
 __pycache__/
 *.pyc
+
+# Local agent guide — never commit; OpenAra is a public repo and this file
+# documents internal release / signing / notarization workflow.
+CLAUDE.md
+.claude/
