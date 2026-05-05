@@ -110,6 +110,10 @@ public final class StdioMCPServer {
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
                 let argsRendered = renderArguments(arguments)
                 OpenAraLogger.info("\(logPrefix) tool-call name=\(name) args=\(argsRendered)", category: "mcp")
+                let targetApp = (arguments["app"] as? String) ?? (arguments["app_id"] as? String)
+                VisualCursorSupport.performOnMain {
+                    signalOpenAraToolCallStart(targetApp: targetApp)
+                }
                 let started = Date()
                 let result = try registry.callTool(name: name, arguments: arguments)
                 let duration = Int(Date().timeIntervalSince(started) * 1000)

@@ -161,6 +161,11 @@ public func setOpenAraCursorVariant(_ variant: String) {
     SoftwareCursorGlyphRenderer.setCursorVariant(variant)
 }
 
+@MainActor
+public func signalOpenAraToolCallStart(targetApp: String?) {
+    SoftwareCursorOverlay.signalToolCallStart(targetApp: targetApp)
+}
+
 struct CursorTargetWindow: Equatable, Sendable {
     let windowID: CGWindowID
     let layer: Int
@@ -293,6 +298,55 @@ enum SoftwareCursorOverlay {
         observationPhase = "hidden"
         writeObservationSnapshot(tipPosition: nil, rotation: nil)
         panel?.orderOut(nil)
+    }
+
+    /// Ensure the overlay is visible and animate it toward a sensible
+    /// placeholder target — the named app's frontmost window center if we
+    /// can find it, otherwise screen center. Called for every tool call so
+    /// even fast AX-only operations leave a visible breadcrumb instead of
+    /// snapping silently.
+    static func signalToolCallStart(targetApp: String?) {
+        guard VisualCursorSupport.isEnabled, canPresentOverlay else {
+            return
+        }
+        let target = frontmostWindowCenter(forApp: targetApp) ?? screenCenter()
+        moveCursor(to: target, in: nil)
+    }
+
+    private static func screenCenter() -> CGPoint {
+        guard let screen = NSScreen.main else { return .zero }
+        let frame = screen.visibleFrame
+        return CGPoint(x: frame.midX, y: frame.midY)
+    }
+
+    private static func frontmostWindowCenter(forApp app: String?) -> CGPoint? {
+        guard let app, !app.isEmpty else { return nil }
+        let needle = app.lowercased()
+        let match = NSWorkspace.shared.runningApplications.first { running in
+            running.bundleIdentifier?.lowercased() == needle
+                || running.localizedName?.lowercased() == needle
+        }
+        guard let match else { return nil }
+        let pid = match.processIdentifier
+        guard
+            let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]],
+            let screenHeight = NSScreen.main?.frame.height
+        else {
+            return nil
+        }
+        for window in infoList {
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int32, ownerPID == pid else { continue }
+            guard let bounds = window[kCGWindowBounds as String] as? [String: Any] else { continue }
+            guard
+                let x = bounds["X"] as? CGFloat,
+                let y = bounds["Y"] as? CGFloat,
+                let w = bounds["Width"] as? CGFloat,
+                let h = bounds["Height"] as? CGFloat,
+                w > 100, h > 100
+            else { continue }
+            return CGPoint(x: x + w / 2, y: screenHeight - y - h / 2)
+        }
+        return nil
     }
 
     private static var canPresentOverlay: Bool {
@@ -690,8 +744,16 @@ enum SoftwareCursorOverlay {
         }
     }
 
+    /// Starting point for a freshly-spawned cursor. Anchors at the bottom
+    /// center of the main screen so each agent's cursor appears to launch
+    /// out of the dock area before animating toward its target.
     private static func defaultInitialTipPosition() -> CGPoint {
-        defaultVisualCursorInitialTipPosition(
+        if let screen = NSScreen.main {
+            let frame = screen.frame
+            let dockY = frame.minY + 12
+            return CGPoint(x: frame.midX, y: dockY)
+        }
+        return defaultVisualCursorInitialTipPosition(
             windowOrigin: .zero,
             tipAnchor: artwork.geometry.tipAnchor
         )
