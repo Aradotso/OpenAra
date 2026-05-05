@@ -11,10 +11,18 @@ tarball_dir="${release_dir}/npm"
 rm -rf "${release_dir}"
 mkdir -p "${tarball_dir}"
 
-node "${repo_root}/scripts/npm/build-packages.mjs" \
-  --configuration release \
-  --arch universal \
+# Set OPENARA_SKIP_NATIVE_BUILD=1 to reuse an already-built dist/OpenAra.app
+# (CI does this so it can build, sign, then notarize before packaging).
+build_args=(
+  --configuration release
+  --arch universal
   --out-dir "${staging_dir}"
+)
+if [[ "${OPENARA_SKIP_NATIVE_BUILD:-0}" == "1" ]]; then
+  build_args+=(--skip-build)
+fi
+
+node "${repo_root}/scripts/npm/build-packages.mjs" "${build_args[@]}"
 
 while IFS= read -r package_dir; do
   npm pack "${package_dir}" --pack-destination "${tarball_dir}" >/dev/null

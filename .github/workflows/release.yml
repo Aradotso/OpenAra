@@ -85,7 +85,52 @@ jobs:
             echo "OPENARA_CODESIGN_KEYCHAIN=${keychain_path}"
           } >> "${GITHUB_ENV}"
 
+      - name: Build OpenAra.app (release, universal)
+        run: |
+          chmod +x ./scripts/build-openara-app.sh
+          ./scripts/build-openara-app.sh \
+            --configuration release \
+            --arch universal
+
+      - name: Notarize OpenAra.app
+        env:
+          APPLE_NOTARY_API_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_DEVELOPER_TEAM_ID: ${{ secrets.APPLE_DEVELOPER_TEAM_ID }}
+        run: |
+          if [ "${OPENARA_CODESIGN_MODE:-adhoc}" != "identity" ]; then
+            echo "OpenAra.app is ad-hoc signed; skipping notarization (notarization requires a Developer ID identity)."
+            exit 0
+          fi
+          if [ -z "${APPLE_NOTARY_API_KEY_P8_BASE64}" ] || [ -z "${APPLE_NOTARY_KEY_ID}" ] || [ -z "${APPLE_NOTARY_ISSUER_ID}" ] || [ -z "${APPLE_DEVELOPER_TEAM_ID}" ]; then
+            echo "No notary credentials configured; skipping OpenAra notarization."
+            exit 0
+          fi
+
+          app_path="dist/OpenAra.app"
+          zip_path="${RUNNER_TEMP}/OpenAra-notarize.zip"
+          api_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+
+          CERT_PATH="${api_key_path}" python3 -c 'import base64, os, pathlib; pathlib.Path(os.environ["CERT_PATH"]).write_bytes(base64.b64decode(os.environ["APPLE_NOTARY_API_KEY_P8_BASE64"]))'
+
+          # notarytool wants a flat archive; use ditto so resource forks survive.
+          /usr/bin/ditto -c -k --keepParent "${app_path}" "${zip_path}"
+
+          xcrun notarytool submit "${zip_path}" \
+            --key "${api_key_path}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --team-id "${APPLE_DEVELOPER_TEAM_ID}" \
+            --wait
+
+          # Staple onto the .app itself so the bundle copied into npm is offline-verifiable.
+          xcrun stapler staple "${app_path}"
+          xcrun stapler validate "${app_path}"
+
       - name: Build npm release artifacts
+        env:
+          OPENARA_SKIP_NATIVE_BUILD: "1"
         run: npm run npm:pack
 
       - name: Upload npm release artifacts
