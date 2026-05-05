@@ -20,15 +20,7 @@
 npm i -g @openara/cli && openara
 ```
 
-That installs the `openara` CLI, drops **OpenAra.app** into `/Applications`, and launches the first-run window so you can grant Accessibility + Screen Recording.
-
-> **Status:** the `@openara/cli` npm package is reserved on the registry but isn't shipping a real release yet. Until it does, drop down to [Build from source](#build-from-source) and substitute `swift run OpenAra` for `openara` in the commands below.
-
 ---
-
-## Wire it into your agent
-
-Each command writes the appropriate config and exits — pick the one matching your agent.
 
 ### Add to Claude Code
 
