@@ -216,7 +216,7 @@ final class PermissionContentController: NSViewController {
         view.addSubview(stackView)
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = AppFonts.serif(size: 44)
+        titleLabel.font = AppFonts.sans(size: 38, weight: .regular)
         titleLabel.textColor = NSColor(calibratedWhite: 0.12, alpha: 1)
         titleLabel.maximumNumberOfLines = 1
         subtitleLabel.font = AppFonts.sans(size: 15, weight: .regular)
