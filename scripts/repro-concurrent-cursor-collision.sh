@@ -2,22 +2,20 @@
 #
 # repro-concurrent-cursor-collision.sh
 #
-# Spins up multiple Claude Code agents driving OpenAra in parallel, each
-# inside a fresh cmux *window* (separate macOS window) — so the test does
-# NOT add splits or tabs to the cmux window you're already working in.
-# The new window is what cmux materializes terminals for, and you can
-# minimize it or close it when done.
+# Spins up multiple Claude Code agents driving OpenAra in parallel as
+# right-splits inside the *current* cmux workspace.
 #
-# For a faster, Claude-free verification of the cursor UX (distinct colors,
-# dock-entry animation, breadcrumb on every tool call), use repro-quick.sh
-# instead — it spawns parallel `openara call` processes without any cmux
-# layout changes at all.
+# Recommended flow: press cmd+n in cmux first to create a fresh workspace,
+# then run this script there. The splits will land in that fresh workspace
+# and your previous workspace stays untouched — cmd+1 takes you back.
 #
-# Run from anywhere with cmux on PATH:
-#   ./scripts/repro-concurrent-cursor-collision.sh
+# (The script refuses to run with more than one pre-existing pane in the
+# workspace, to make it harder to clobber an existing layout. Override with
+# OPENARA_REPRO_ALLOW_DIRTY=1 if you really want to.)
 #
-# When it returns, switch to the new cmux window (cmd+` cycles windows) to
-# watch the agents work. `openara sessions` shows the live color mapping.
+# For a faster, Claude-free verification of the cursor UX, use
+# repro-quick.sh instead — it spawns parallel `openara mcp` processes with
+# no cmux changes at all.
 #
 # Overrides:
 #   OPENARA_REPRO_CC             binary to launch in each pane (default: claude)
@@ -27,12 +25,14 @@
 #                                Safari/TextEdit prompts)
 #   OPENARA_REPRO_CC_FLAGS       extra flags passed to the agent CLI
 #                                (default: --dangerously-skip-permissions)
+#   OPENARA_REPRO_ALLOW_DIRTY    1 to skip the "fresh workspace" precheck
 
 set -euo pipefail
 
 CC_CMD="${OPENARA_REPRO_CC:-claude}"
 CC_FLAGS="${OPENARA_REPRO_CC_FLAGS:---dangerously-skip-permissions}"
 BOOT_DELAY="${OPENARA_REPRO_BOOT_DELAY:-8}"
+ALLOW_DIRTY="${OPENARA_REPRO_ALLOW_DIRTY:-0}"
 
 DEFAULT_PROMPTS=(
   "use openara to open the Wikipedia article about cats in Safari"
@@ -64,41 +64,33 @@ parse_ref() {
     | head -1
 }
 
-# 1. Spawn a fresh cmux window. cmux only materializes terminals in the
-#    focused window; using a new window keeps your current window untouched
-#    while still letting the agents run in real ttys.
-output="$(cmux new-window 2>&1 | head -1)"
-window_uuid="$(printf '%s\n' "$output" | awk '{print $NF}')"
-if [[ -z "$window_uuid" ]]; then
-  echo "error: could not parse window uuid from: $output" >&2
+# 1. Refuse to run unless the workspace is fresh (1 pane only). This is
+#    the cleanest signal that the user pressed cmd+n first; running in a
+#    busy workspace would clutter their existing layout.
+pane_count="$(cmux list-panes 2>&1 | grep -c '^[* ] *pane:' || true)"
+if [[ "$ALLOW_DIRTY" != "1" && "$pane_count" -gt 1 ]]; then
+  echo "error: this workspace already has ${pane_count} panes — press cmd+n in cmux to" >&2
+  echo "       create a fresh workspace first, then run this script there." >&2
+  echo "       (set OPENARA_REPRO_ALLOW_DIRTY=1 to override.)" >&2
   exit 1
 fi
-echo ">> created cmux window ${window_uuid:0:8}…"
-sleep 0.5
 
-# 2. Add one pane per prompt to the new window. The first prompt reuses
-#    the window's default pane; subsequent prompts are right-splits inside
-#    the new window so all panes are visible side-by-side.
+# 2. Create one right-split per prompt in the *current* cmux workspace.
+#    new-pane materializes terminals because the current workspace is the
+#    one the user is looking at.
+echo ">> spawning ${#PROMPTS[@]} right-splits in the current workspace"
+
 surfaces=()
-existing_pane_surface="$(cmux list-pane-surfaces --window "$window_uuid" 2>&1 | awk '{for(i=1;i<=NF;i++) if($i~/^surface:/) print $i}' | head -1 || true)"
-if [[ -n "$existing_pane_surface" ]]; then
-  surfaces+=("$existing_pane_surface")
-fi
-
-needed=$(( ${#PROMPTS[@]} - ${#surfaces[@]} ))
-for ((i = 0; i < needed; i++)); do
-  output="$(cmux new-pane --window "$window_uuid" --direction right)"
+for ((i = 0; i < ${#PROMPTS[@]}; i++)); do
+  output="$(cmux new-pane --direction right)"
   surface="$(parse_ref surface "$output")"
   if [[ -z "$surface" ]]; then
     echo "error: could not parse surface ref from: $output" >&2
     exit 1
   fi
   surfaces+=("$surface")
+  echo "   pane $((i + 1)): ${surface}"
   sleep 0.3
-done
-
-for ((i = 0; i < ${#surfaces[@]}; i++)); do
-  echo "   pane $((i + 1)): ${surfaces[$i]}"
 done
 
 # 3. Launch the agent CLI in each tab.
@@ -124,9 +116,9 @@ done
 
 cat <<EOF
 
->> repro running in cmux window ${window_uuid:0:8}…
-   This window is undisturbed. cmd+\` to cycle to the new window when
-   you want to watch the agents work; close that window when done.
+>> repro running. The ${#surfaces[@]} agents are now in this workspace.
+   When you want to come back to your other work, switch workspaces in
+   the cmux sidebar (or close this workspace when done).
 
    Verify:
    - Each agent's OpenAra cursor is a different color.
