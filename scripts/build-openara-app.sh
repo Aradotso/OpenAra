@@ -365,8 +365,6 @@ cat > "${contents_dir}/Info.plist" <<PLIST
   <string>OpenAra</string>
   <key>CFBundleIconFile</key>
   <string>${bundle_icon_name%.icns}</string>
-  <key>CFBundleIconName</key>
-  <string>${bundle_icon_name%.icns}</string>
   <key>CFBundleIdentifier</key>
   <string>${bundle_identifier}</string>
   <key>CFBundleInfoDictionaryVersion</key>

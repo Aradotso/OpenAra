@@ -53,6 +53,7 @@ enum OpenAraMain {
                 let kind = client.type == 0 ? "bundle-id" : "path"
                 print("  [\(kind)] \(client.identifier)")
             }
+            printStaleTCCFindings()
             if !permissions.missingPermissions.isEmpty {
                 PermissionOnboardingApp.launch()
             }
@@ -80,8 +81,10 @@ enum OpenAraMain {
             print(openAraHelpText(command: command))
         case .version:
             print(resolvedOpenAraVersion())
-        case .uninstall:
-            try runUninstall()
+        case let .uninstall(includeLegacy):
+            try runUninstall(includeLegacy: includeLegacy)
+        case let .resetPermissions(includeLegacy, includeDev):
+            try runResetPermissions(includeLegacy: includeLegacy, includeDev: includeDev)
         case .update:
             try runUpdate()
         case .launchOnboarding:
@@ -175,7 +178,7 @@ enum OpenAraMain {
     }
 
     @MainActor
-    private static func runUninstall() throws {
+    private static func runUninstall(includeLegacy: Bool) throws {
         let installedApp = "/Applications/OpenAra.app"
 
         if FileManager.default.fileExists(atPath: installedApp) {
@@ -190,12 +193,8 @@ enum OpenAraMain {
             print("/Applications/OpenAra.app is not present (nothing to remove).")
         }
 
-        let tccutilResult = runProcess("/usr/bin/tccutil", arguments: ["reset", "All", "so.ara.openara"])
-        if tccutilResult == 0 {
-            print("Reset bundle-id TCC entries for so.ara.openara.")
-        } else {
-            print("tccutil reset returned non-zero (\(tccutilResult)). Some bundle-id entries may not have been cleared.")
-        }
+        runTccutilResets(includeLegacy: includeLegacy, includeDev: true)
+        printStaleTCCFindings()
 
         print("""
 
@@ -210,6 +209,80 @@ enum OpenAraMain {
         To reinstall fresh:
           npm i -g @openara/cli && openara
         """)
+    }
+
+    @MainActor
+    private static func runResetPermissions(includeLegacy: Bool, includeDev: Bool) throws {
+        runTccutilResets(includeLegacy: includeLegacy, includeDev: includeDev)
+        printStaleTCCFindings()
+
+        print("""
+
+        Bundle-id TCC entries cleared. Path-based grants (rows that appear in
+        System Settings as a /Users/... or /Applications/... path) can't be
+        cleared from the CLI — remove each one manually under
+        System Settings → Privacy & Security → Accessibility and
+        Screen & System Audio Recording.
+
+        Re-launching the onboarding flow now…
+        """)
+
+        PermissionOnboardingApp.launch()
+    }
+
+    @discardableResult
+    @MainActor
+    private static func runTccutilResets(includeLegacy: Bool, includeDev: Bool) -> Bool {
+        var allOK = true
+        let targets = PermissionSupport.tccutilResetTargets(includeLegacy: includeLegacy, includeDev: includeDev)
+        for bundleID in targets {
+            let status = runProcess("/usr/bin/tccutil", arguments: ["reset", "All", bundleID])
+            if status == 0 {
+                print("Reset bundle-id TCC entries for \(bundleID).")
+            } else {
+                allOK = false
+                print("tccutil reset for \(bundleID) returned non-zero (\(status)). It may not have been registered with TCC, which is fine.")
+            }
+        }
+        return allOK
+    }
+
+    @MainActor
+    private static func printStaleTCCFindings() {
+        guard let findings = PermissionSupport.staleTCCFindings() else {
+            print("")
+            print("Could not read TCC.db (no Full Disk Access for this process).")
+            print("Open System Settings → Privacy & Security → Full Disk Access,")
+            print("add your terminal, and re-run for stale-grant detection.")
+            return
+        }
+
+        guard !findings.isEmpty else {
+            return
+        }
+
+        print("")
+        print("Stale TCC entries detected (these likely confuse onboarding — remove via System Settings → Privacy & Security):")
+        for finding in findings {
+            let serviceLabel = finding.entry.service == .accessibility ? "Accessibility" : "Screen Recording"
+            let kindLabel = finding.entry.isPathBased ? "path" : "bundle-id"
+            let reasonLabel = describeStaleReason(finding.reason)
+            let grantLabel = finding.entry.isGranted ? "granted" : "denied/prompt"
+            print("  [\(serviceLabel)] [\(kindLabel)] \(finding.entry.client) — \(reasonLabel) (\(grantLabel))")
+        }
+    }
+
+    private static func describeStaleReason(_ reason: LegacyTCCStaleReason) -> String {
+        switch reason {
+        case .pathMissing:
+            return "path no longer exists on disk"
+        case .pathOutsideApplications:
+            return "path is not /Applications/OpenAra.app — leftover from a previous install location"
+        case .legacyUpstreamBundle:
+            return "upstream Open Computer Use grant — re-run with --include-legacy to clear"
+        case .devBundleOnReleaseSystem:
+            return "dev-variant grant with no /Applications/OpenAra (Dev).app present"
+        }
     }
 
     @MainActor

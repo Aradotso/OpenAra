@@ -11,7 +11,8 @@ public enum OpenAraCLICommand: Equatable {
     case sessions
     case help(command: String?)
     case version
-    case uninstall
+    case uninstall(includeLegacy: Bool)
+    case resetPermissions(includeLegacy: Bool, includeDev: Bool)
     case update
 }
 
@@ -72,7 +73,9 @@ public func parseOpenAraCLI(arguments: [String]) throws -> OpenAraCLICommand {
     case "snapshot":
         return try parseSnapshot(arguments: Array(arguments.dropFirst()))
     case "uninstall", "delete":
-        return try parseSimpleCommand(name: "uninstall", arguments: Array(arguments.dropFirst()), result: .uninstall)
+        return try parseUninstall(arguments: Array(arguments.dropFirst()))
+    case "reset-permissions", "reset-tcc":
+        return try parseResetPermissions(arguments: Array(arguments.dropFirst()))
     case "update", "upgrade":
         return try parseSimpleCommand(name: "update", arguments: Array(arguments.dropFirst()), result: .update)
     default:
@@ -104,6 +107,7 @@ public func openAraHelpText(command: String? = nil) -> String {
           sessions             List active OpenAra MCP sessions and their cursor colors.
           update               Upgrade to the latest @openara/cli on npm.
           uninstall            Remove /Applications/OpenAra.app and reset bundle-id TCC entries.
+          reset-permissions    Clear OpenAra TCC entries without removing the app.
           help [command]       Show general or command-specific help.
           version              Print the CLI version.
 
@@ -173,6 +177,34 @@ public func openAraHelpText(command: String? = nil) -> String {
 
         Notify a running local MCP process that the current host turn has ended.
         Codex legacy notify appends the after-agent JSON payload as the last argument.
+        """
+    case "uninstall":
+        return """
+        Usage:
+          openara uninstall [--include-legacy]
+
+        Remove /Applications/OpenAra.app and run `tccutil reset All` against the
+        OpenAra bundle identifiers. Path-based TCC grants must be removed manually
+        in System Settings — this command lists any it finds before exiting.
+
+        Options:
+          --include-legacy     Also reset TCC entries for the upstream
+                               com.ifuryst.opencomputeruse fork. Useful if the
+                               machine had Open Computer Use installed before.
+        """
+    case "reset-permissions":
+        return """
+        Usage:
+          openara reset-permissions [--include-legacy] [--no-dev]
+
+        Run `tccutil reset All` for the OpenAra bundle identifiers without removing
+        the app, then re-launch the onboarding flow. Use this on teammate machines
+        that have stale grants from an older OpenAra (or upstream Open Computer Use)
+        install.
+
+        Options:
+          --include-legacy     Also reset com.ifuryst.opencomputeruse (upstream).
+          --no-dev             Skip resetting so.ara.openara.dev (the dev variant).
         """
     case "version":
         return """
@@ -379,6 +411,46 @@ private func parseTimeIntervalOptionValue(
     }
 
     return value
+}
+
+private func parseUninstall(arguments: [String]) throws -> OpenAraCLICommand {
+    var includeLegacy = false
+
+    for argument in arguments {
+        switch argument {
+        case "-h", "--help":
+            return .help(command: "uninstall")
+        case "--include-legacy":
+            includeLegacy = true
+        default:
+            throw OpenAraCLIError(message: "Unknown uninstall option: \(argument)", helpCommand: "uninstall")
+        }
+    }
+
+    return .uninstall(includeLegacy: includeLegacy)
+}
+
+private func parseResetPermissions(arguments: [String]) throws -> OpenAraCLICommand {
+    var includeLegacy = false
+    var includeDev = true
+
+    for argument in arguments {
+        switch argument {
+        case "-h", "--help":
+            return .help(command: "reset-permissions")
+        case "--include-legacy":
+            includeLegacy = true
+        case "--no-dev":
+            includeDev = false
+        case "--include-dev":
+            // Accepted as a no-op for symmetry: dev resets default to on.
+            includeDev = true
+        default:
+            throw OpenAraCLIError(message: "Unknown reset-permissions option: \(argument)", helpCommand: "reset-permissions")
+        }
+    }
+
+    return .resetPermissions(includeLegacy: includeLegacy, includeDev: includeDev)
 }
 
 private func formatOpenAraDelay(_ delay: TimeInterval) -> String {

@@ -113,8 +113,100 @@ import Testing
         #expect(help.contains("openara [command] [options]"))
         #expect(help.contains("snapshot <app>"))
         #expect(help.contains("call <tool>"))
+        #expect(help.contains("reset-permissions"))
         #expect(help.contains("-h, --help"))
         #expect(help.contains("-v, --version"))
+    }
+
+    @Test func parsesUninstallWithOptionalLegacyFlag() throws {
+        #expect(try parseOpenAraCLI(arguments: ["uninstall"]) == .uninstall(includeLegacy: false))
+        #expect(try parseOpenAraCLI(arguments: ["delete"]) == .uninstall(includeLegacy: false))
+        #expect(try parseOpenAraCLI(arguments: ["uninstall", "--include-legacy"]) == .uninstall(includeLegacy: true))
+        #expect(try parseOpenAraCLI(arguments: ["uninstall", "-h"]) == .help(command: "uninstall"))
+    }
+
+    @Test func parsesResetPermissionsWithFlags() throws {
+        #expect(
+            try parseOpenAraCLI(arguments: ["reset-permissions"])
+                == .resetPermissions(includeLegacy: false, includeDev: true)
+        )
+        #expect(
+            try parseOpenAraCLI(arguments: ["reset-tcc"])
+                == .resetPermissions(includeLegacy: false, includeDev: true)
+        )
+        #expect(
+            try parseOpenAraCLI(arguments: ["reset-permissions", "--include-legacy"])
+                == .resetPermissions(includeLegacy: true, includeDev: true)
+        )
+        #expect(
+            try parseOpenAraCLI(arguments: ["reset-permissions", "--no-dev"])
+                == .resetPermissions(includeLegacy: false, includeDev: false)
+        )
+        #expect(
+            try parseOpenAraCLI(arguments: ["reset-permissions", "--include-legacy", "--no-dev"])
+                == .resetPermissions(includeLegacy: true, includeDev: false)
+        )
+        #expect(
+            try parseOpenAraCLI(arguments: ["reset-permissions", "--help"])
+                == .help(command: "reset-permissions")
+        )
+    }
+
+    @Test func rejectsUnknownResetPermissionsOption() {
+        #expect(throws: OpenAraCLIError(
+            message: "Unknown reset-permissions option: --weird",
+            helpCommand: "reset-permissions"
+        )) {
+            _ = try parseOpenAraCLI(arguments: ["reset-permissions", "--weird"])
+        }
+    }
+
+    @Test func resetPermissionsHelpDescribesFlags() {
+        let help = openAraHelpText(command: "reset-permissions")
+        #expect(help.contains("openara reset-permissions"))
+        #expect(help.contains("--include-legacy"))
+        #expect(help.contains("--no-dev"))
+    }
+
+    @Test func tccutilResetTargetsRespectFlags() {
+        let defaults = PermissionSupport.tccutilResetTargets()
+        #expect(defaults.contains("so.ara.openara"))
+        #expect(defaults.contains("so.ara.openara.dev"))
+        #expect(!defaults.contains("com.ifuryst.opencomputeruse"))
+
+        let withLegacy = PermissionSupport.tccutilResetTargets(includeLegacy: true)
+        #expect(withLegacy.contains("com.ifuryst.opencomputeruse"))
+        #expect(withLegacy.contains("com.ifuryst.opencomputeruse.dev"))
+
+        let releaseOnly = PermissionSupport.tccutilResetTargets(includeDev: false)
+        #expect(releaseOnly == ["so.ara.openara"])
+    }
+
+    @Test func staleReasonClassifiesCommonCases() {
+        let upstreamEntry = LegacyTCCEntry(
+            service: .accessibility,
+            client: "com.ifuryst.opencomputeruse",
+            clientType: 0,
+            authValue: 2
+        )
+        #expect(PermissionSupport.staleReason(for: upstreamEntry) == .legacyUpstreamBundle)
+
+        let canonicalEntry = LegacyTCCEntry(
+            service: .accessibility,
+            client: "so.ara.openara",
+            clientType: 0,
+            authValue: 2
+        )
+        #expect(PermissionSupport.staleReason(for: canonicalEntry) == nil)
+
+        let missingPath = "/tmp/openara-test-\(UUID().uuidString)/OpenAra.app"
+        let pathMissingEntry = LegacyTCCEntry(
+            service: .screenRecording,
+            client: missingPath,
+            clientType: 1,
+            authValue: 2
+        )
+        #expect(PermissionSupport.staleReason(for: pathMissingEntry) == .pathMissing)
     }
 
     @Test func resolvedVersionFallsBackWhenBundleHasNoVersionMetadata() {

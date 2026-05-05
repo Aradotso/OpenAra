@@ -140,12 +140,15 @@ public enum PermissionSupport {
     public static let bundleIdentifier = "so.ara.openara"
     public static let developmentBundleDisplayName = "OpenAra (Dev)"
     public static let developmentBundleIdentifier = "so.ara.openara.dev"
+    public static let legacyUpstreamBundleIdentifier = "com.ifuryst.opencomputeruse"
+    public static let legacyUpstreamDevelopmentBundleIdentifier = "com.ifuryst.opencomputeruse.dev"
     private static let releaseAppBundleName = "\(bundleDisplayName).app"
     private static let developmentAppBundleName = "\(developmentBundleDisplayName).app"
     private static let appVariantInfoKey = "OpenAraAppVariant"
     private static let npmPackageNames = [
         "@openara/cli",
     ]
+    private static let canonicalInstalledAppPath = "/Applications/\(releaseAppBundleName)"
 
     public static func currentBundleDisplayName(bundle: Bundle = .main) -> String {
         let displayName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
@@ -177,6 +180,84 @@ public enum PermissionSupport {
             mainBundleIdentifier: mainBundleIdentifier,
             includeCanonicalBundleIdentifier: !isDevelopmentBundleIdentifier(mainBundleIdentifier)
         )
+    }
+
+    /// Returns every TCC row whose service is Accessibility or Screen Recording and whose
+    /// client identifier looks like an OpenAra (or upstream OpenComputerUse) grant.
+    /// Returns nil when the TCC database can't be opened — typically because the running
+    /// process lacks Full Disk Access.
+    public static func legacyTCCEntries() -> [LegacyTCCEntry]? {
+        TCCDatabase.system.scanLegacyEntries()
+    }
+
+    /// Classifies a TCC row as stale relative to the canonical /Applications/OpenAra.app
+    /// install. Returns nil for rows that are still load-bearing (canonical bundle-id and
+    /// canonical install path).
+    public static func staleReason(for entry: LegacyTCCEntry) -> LegacyTCCStaleReason? {
+        switch entry.clientType {
+        case 0:
+            if entry.client == legacyUpstreamBundleIdentifier
+                || entry.client == legacyUpstreamDevelopmentBundleIdentifier
+            {
+                return .legacyUpstreamBundle
+            }
+            if entry.client == developmentBundleIdentifier,
+               !FileManager.default.fileExists(atPath: developmentInstallPath)
+            {
+                return .devBundleOnReleaseSystem
+            }
+            return nil
+        case 1:
+            if !FileManager.default.fileExists(atPath: entry.client) {
+                return .pathMissing
+            }
+            if entry.client != canonicalInstalledAppPath
+                && entry.client != developmentInstallPath
+            {
+                return .pathOutsideApplications
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    /// All stale findings derived from `legacyTCCEntries()`. Returns nil when TCC.db is
+    /// unreadable (no Full Disk Access), and `[]` when everything in TCC looks healthy.
+    public static func staleTCCFindings() -> [LegacyTCCFinding]? {
+        guard let entries = legacyTCCEntries() else {
+            return nil
+        }
+
+        var findings: [LegacyTCCFinding] = []
+        for entry in entries {
+            if let reason = staleReason(for: entry) {
+                findings.append(LegacyTCCFinding(entry: entry, reason: reason))
+            }
+        }
+        return findings
+    }
+
+    /// Bundle identifiers that `tccutil reset All <id>` should be invoked against.
+    /// `includeLegacy` adds the upstream OpenComputerUse rows; `includeDev` adds the
+    /// development bundle for users who built from source.
+    public static func tccutilResetTargets(
+        includeLegacy: Bool = false,
+        includeDev: Bool = true
+    ) -> [String] {
+        var targets: [String] = [bundleIdentifier]
+        if includeDev {
+            targets.append(developmentBundleIdentifier)
+        }
+        if includeLegacy {
+            targets.append(legacyUpstreamBundleIdentifier)
+            targets.append(legacyUpstreamDevelopmentBundleIdentifier)
+        }
+        return targets
+    }
+
+    private static var developmentInstallPath: String {
+        "/Applications/\(developmentAppBundleName)"
     }
 
     public static func openSystemSettings(for permission: SystemPermissionKind) {
@@ -487,6 +568,52 @@ public struct PermissionClientRecord: Sendable, Equatable, Hashable {
     public let type: Int32
 }
 
+public struct LegacyTCCEntry: Sendable, Equatable, Hashable {
+    public enum Service: String, Sendable {
+        case accessibility = "kTCCServiceAccessibility"
+        case screenRecording = "kTCCServiceScreenCapture"
+    }
+
+    public let service: Service
+    public let client: String
+    public let clientType: Int32
+    public let authValue: Int32
+
+    public init(service: Service, client: String, clientType: Int32, authValue: Int32) {
+        self.service = service
+        self.client = client
+        self.clientType = clientType
+        self.authValue = authValue
+    }
+
+    public var isPathBased: Bool { clientType == 1 }
+    public var isBundleIdentifierBased: Bool { clientType == 0 }
+    public var isGranted: Bool { tccAuthorizationGranted(authValues: [authValue]) }
+}
+
+public enum LegacyTCCStaleReason: Sendable, Equatable, Hashable {
+    /// Path row whose underlying file no longer exists on disk.
+    case pathMissing
+    /// Path row that does not point at /Applications/OpenAra.app — likely a leftover from
+    /// a former dev or npm-cache install location.
+    case pathOutsideApplications
+    /// Bundle-id row for the upstream Open Computer Use fork — granted before the user
+    /// switched to OpenAra. Confusing in System Settings; safe to clear with tccutil.
+    case legacyUpstreamBundle
+    /// Bundle-id row for the development build (so.ara.openara.dev) on a release-only system.
+    case devBundleOnReleaseSystem
+}
+
+public struct LegacyTCCFinding: Sendable, Equatable, Hashable {
+    public let entry: LegacyTCCEntry
+    public let reason: LegacyTCCStaleReason
+
+    public init(entry: LegacyTCCEntry, reason: LegacyTCCStaleReason) {
+        self.entry = entry
+        self.reason = reason
+    }
+}
+
 func tccAuthorizationGranted(authValues: [Int32?]) -> Bool {
     authValues.contains(2)
 }
@@ -496,7 +623,7 @@ private struct TCCAuthorizationStore {
     let screenRecording: Bool?
 
     static var current: TCCAuthorizationStore {
-        let database = TCCDatabase(path: "/Library/Application Support/com.apple.TCC/TCC.db")
+        let database = TCCDatabase.system
         let clients = PermissionSupport.currentPermissionClients()
         return TCCAuthorizationStore(
             accessibility: database.authorization(for: .accessibility, clients: clients),
@@ -511,11 +638,83 @@ private struct TCCDatabase {
         case screenRecording = "kTCCServiceScreenCapture"
     }
 
+    static let system = TCCDatabase(path: "/Library/Application Support/com.apple.TCC/TCC.db")
+
     private let path: String
     private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     init(path: String) {
         self.path = path
+    }
+
+    func scanLegacyEntries() -> [LegacyTCCEntry]? {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            if database != nil {
+                sqlite3_close(database)
+            }
+            return nil
+        }
+        defer { sqlite3_close(database) }
+
+        // Match every row whose client looks like an OpenAra-family grant — bundle-id
+        // variants for the OpenAra fork and the upstream OpenComputerUse fork, plus any
+        // path-based row that points at an OpenAra.app or OpenComputerUse.app on disk.
+        let query = """
+        SELECT service, client, client_type, auth_value
+        FROM access
+        WHERE service IN (?, ?)
+          AND (
+                client LIKE 'so.ara.openara%'
+             OR client LIKE 'com.ifuryst.opencomputeruse%'
+             OR (client_type = 1 AND client LIKE '%/OpenAra.app%')
+             OR (client_type = 1 AND client LIKE '%/OpenAra (Dev).app%')
+             OR (client_type = 1 AND client LIKE '%/OpenComputerUse.app%')
+             OR (client_type = 1 AND client LIKE '%/Open Computer Use.app%')
+             OR (client_type = 1 AND client LIKE '%/Open Computer Use (Dev).app%')
+          )
+        ORDER BY service ASC, client ASC;
+        """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
+            if statement != nil {
+                sqlite3_finalize(statement)
+            }
+            return nil
+        }
+        defer { sqlite3_finalize(statement) }
+
+        sqlite3_bind_text(statement, 1, Service.accessibility.rawValue, -1, sqliteTransient)
+        sqlite3_bind_text(statement, 2, Service.screenRecording.rawValue, -1, sqliteTransient)
+
+        var entries: [LegacyTCCEntry] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let serviceCString = sqlite3_column_text(statement, 0),
+                  let clientCString = sqlite3_column_text(statement, 1)
+            else {
+                continue
+            }
+            let serviceString = String(cString: serviceCString)
+            let client = String(cString: clientCString)
+            let clientType = sqlite3_column_int(statement, 2)
+            let authValue = sqlite3_column_int(statement, 3)
+            guard let service = Service(rawValue: serviceString),
+                  let entryService = LegacyTCCEntry.Service(rawValue: service.rawValue)
+            else {
+                continue
+            }
+            entries.append(
+                LegacyTCCEntry(
+                    service: entryService,
+                    client: client,
+                    clientType: clientType,
+                    authValue: authValue
+                )
+            )
+        }
+
+        return entries
     }
 
     func authorization(for service: Service, clients: [PermissionClientRecord]) -> Bool? {
