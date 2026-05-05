@@ -145,8 +145,13 @@ final class PermissionContentController: NSViewController {
     private let backgroundView = GradientBackgroundView()
     private let stackView = NSStackView()
     private let iconView = AppGlyphView()
-    private let titleLabel = NSTextField(labelWithString: "Enable OpenAra")
-    private let subtitleLabel = NSTextField(wrappingLabelWithString: "OpenAra needs these permissions to use apps on your Mac.\nThese permissions are only used when you ask it to perform tasks.")
+    /// Override the brand text shown in the onboarding window. Hosts that embed OpenAra
+    /// (e.g. AraDesktop) set this to their own product name so the user sees one coherent
+    /// brand instead of "OpenAra" leaking through. Defaults to "OpenAra" for the standalone
+    /// CLI / npm install path.
+    private static let brandName: String = ProcessInfo.processInfo.environment["OPENARA_BRAND_NAME"] ?? "OpenAra"
+    private let titleLabel = NSTextField(labelWithString: "Enable \(PermissionContentController.brandName)")
+    private let subtitleLabel = NSTextField(wrappingLabelWithString: "\(PermissionContentController.brandName) needs these permissions to use apps on your Mac.\nThese permissions are only used when you ask it to perform tasks.")
     private let cardsContainer = NSStackView()
     private let completionLabel = NSTextField(labelWithString: "All required permissions are enabled.")
     private let refreshTimerInterval: TimeInterval = 0.25
