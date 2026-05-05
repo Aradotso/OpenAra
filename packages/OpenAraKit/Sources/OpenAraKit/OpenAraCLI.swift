@@ -78,6 +78,13 @@ public func parseOpenAraCLI(arguments: [String]) throws -> OpenAraCLICommand {
         return try parseResetPermissions(arguments: Array(arguments.dropFirst()))
     case "update", "upgrade":
         return try parseSimpleCommand(name: "update", arguments: Array(arguments.dropFirst()), result: .update)
+    case "launch-onboarding", "onboarding":
+        // Explicit string alias for the no-args default. Hosts that embed OpenAra
+        // (e.g. AraDesktop) end up writing `openara launch-onboarding` because that
+        // matches the symbolic name of the case in OpenAraCLICommand and reads
+        // naturally — without this alias the parser would say "Unknown command:
+        // launch-onboarding" and exit before ever showing the onboarding window.
+        return try parseSimpleCommand(name: "launch-onboarding", arguments: Array(arguments.dropFirst()), result: .launchOnboarding)
     default:
         if first.hasPrefix("-") {
             throw OpenAraCLIError(message: "Unknown option: \(first)", helpCommand: nil)
