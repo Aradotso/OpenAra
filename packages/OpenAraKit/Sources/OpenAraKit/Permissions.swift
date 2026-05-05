@@ -17,11 +17,16 @@ public enum SystemPermissionKind: String, CaseIterable, Sendable {
     }
 
     public var subtitle: String {
+        // Honor the OPENARA_BRAND_NAME env var so embedding hosts (e.g. AraDesktop)
+        // can replace "OpenAra" in the per-card subtitles without requiring every
+        // call site to thread a brand parameter. Default keeps the standalone CLI
+        // brand exactly as before.
+        let brand = ProcessInfo.processInfo.environment["OPENARA_BRAND_NAME"] ?? "OpenAra"
         switch self {
         case .accessibility:
-            return "Allows OpenAra to access app interfaces"
+            return "Allows \(brand) to access app interfaces"
         case .screenRecording:
-            return "OpenAra uses screenshots to know where to click"
+            return "\(brand) uses screenshots to know where to click"
         }
     }
 
