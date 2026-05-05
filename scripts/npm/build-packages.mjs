@@ -336,9 +336,13 @@ if (installCommands.has(command)) {
 
 function renderPostinstall(packageName, version) {
   return `#!/usr/bin/env node
-const { spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const mcpConfig = ${JSON.stringify({
   mcpServers: {
