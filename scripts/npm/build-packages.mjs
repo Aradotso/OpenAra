@@ -170,12 +170,15 @@ function renderLauncher() {
   return `#!/usr/bin/env node
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const platformPackages = ${JSON.stringify(platformLaunchTable(), null, 2)};
 const packageRoot = path.resolve(__dirname, "..");
 const args = process.argv.slice(2);
 const command = args[0] || "";
+const homeOpenaraRoot = path.join(os.homedir(), ".openara");
+const homeCurrentLink = path.join(homeOpenaraRoot, "current");
 const installCommands = new Map([
   ["install-claude-mcp", "install-claude-mcp.sh"],
   ["install-clauce-mcp", "install-claude-mcp.sh"],
@@ -280,6 +283,22 @@ function resolveNativeExecutable() {
   }
 
   if (process.platform === "darwin") {
+    // Prefer the auto-updated bundle in ~/.openara/current. The background
+    // updater (scripts/auto-update.mjs) keeps this fresh against npm latest,
+    // so users who haven't run \`npm install -g\` recently still get the
+    // newest published version automatically.
+    const homeUpdatedExecutable = path.join(
+      homeCurrentLink,
+      "dist",
+      "OpenAra.app",
+      "Contents",
+      "MacOS",
+      "OpenAra",
+    );
+    if (fs.existsSync(homeUpdatedExecutable)) {
+      return homeUpdatedExecutable;
+    }
+
     const installedAppExecutable = "/Applications/OpenAra.app/Contents/MacOS/OpenAra";
     if (fs.existsSync(installedAppExecutable)) {
       return installedAppExecutable;
@@ -295,6 +314,45 @@ Reinstall with:
   }
 
   return executablePath;
+}
+
+function readPackageVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf-8"));
+    return pkg.version || "0.0.0";
+  } catch (_error) {
+    return "0.0.0";
+  }
+}
+
+function effectiveInstalledVersion() {
+  // If we're already running from ~/.openara/current/<v>/, the version is
+  // baked into the symlink target. Otherwise fall back to package.json.
+  try {
+    const target = fs.readlinkSync(homeCurrentLink);
+    const version = path.basename(target);
+    if (/^\\d+\\.\\d+\\.\\d+/.test(version)) {
+      return version;
+    }
+  } catch (_error) {}
+  return readPackageVersion();
+}
+
+function spawnAutoUpdater() {
+  if (process.env.OPENARA_AUTO_UPDATE === "off") return;
+  if (process.platform !== "darwin") return;
+  const updaterPath = path.join(packageRoot, "scripts", "auto-update.mjs");
+  if (!fs.existsSync(updaterPath)) return;
+  try {
+    const child = spawn(
+      process.execPath,
+      [updaterPath, effectiveInstalledVersion()],
+      { detached: true, stdio: "ignore", windowsHide: true },
+    );
+    child.unref();
+  } catch (_error) {
+    // Auto-update is best-effort; never let a failure here surface to the user.
+  }
 }
 
 if (command === "-h" || command === "--help" || (command === "help" && args.length <= 1)) {
@@ -336,8 +394,230 @@ if (installCommands.has(command)) {
   const scriptName = installCommands.get(command);
   runInstallCommand(scriptName, args.slice(1));
 } else {
+  spawnAutoUpdater();
   spawnAndExit(resolveNativeExecutable(), args);
 }
+`;
+}
+
+function renderAutoUpdater(packageName) {
+  return `#!/usr/bin/env node
+// Background auto-updater for ${packageName}.
+// Spawned detached + stdio:ignore from bin/openara, so it never affects the
+// foreground process (including MCP stdio). On a fresh release it downloads
+// the new tarball into ~/.openara/versions/<v>/ and atomically swaps the
+// ~/.openara/current symlink. The next "openara" invocation picks up the new
+// bundle automatically — no sudo, no \`npm install -g\` re-run.
+//
+// Disable via OPENARA_AUTO_UPDATE=off.
+
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as https from "node:https";
+
+const PACKAGE_NAME = "${packageName}";
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const REGISTRY_URL = \`https://registry.npmjs.org/\${PACKAGE_NAME.replace("/", "%2F")}/latest\`;
+
+const home = os.homedir();
+const root = path.join(home, ".openara");
+const versionsDir = path.join(root, "versions");
+const downloadsDir = path.join(root, "downloads");
+const checkFile = path.join(root, "update-check.json");
+const logFile = path.join(root, "update.log");
+const currentLink = path.join(root, "current");
+
+const installedVersion = process.argv[2] || "0.0.0";
+
+function log(...parts) {
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    fs.appendFileSync(logFile, \`[\${new Date().toISOString()}] \${parts.join(" ")}\\n\`);
+  } catch (_) {}
+}
+
+function readCheck() {
+  try { return JSON.parse(fs.readFileSync(checkFile, "utf-8")); } catch (_) { return {}; }
+}
+
+function writeCheck(data) {
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(checkFile, JSON.stringify(data, null, 2));
+  } catch (_) {}
+}
+
+function compareSemver(a, b) {
+  const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i += 1) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
+
+function fetchJSON(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { "User-Agent": \`\${PACKAGE_NAME}-auto-update\`, Accept: "application/json" } }, (res) => {
+      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location && redirects < 4) {
+        res.resume();
+        return fetchJSON(res.headers.location, redirects + 1).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(\`HTTP \${res.statusCode} for \${url}\`));
+      }
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8"))); }
+        catch (e) { reject(e); }
+      });
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+function fetchBuffer(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { "User-Agent": \`\${PACKAGE_NAME}-auto-update\` } }, (res) => {
+      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location && redirects < 4) {
+        res.resume();
+        return fetchBuffer(res.headers.location, redirects + 1).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(\`HTTP \${res.statusCode} for \${url}\`));
+      }
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+function swapSymlink(targetVersionDir) {
+  const tmpLink = \`\${currentLink}.tmp-\${process.pid}\`;
+  try { fs.unlinkSync(tmpLink); } catch (_) {}
+  fs.symlinkSync(targetVersionDir, tmpLink);
+  fs.renameSync(tmpLink, currentLink);
+}
+
+function cleanupOldVersions(keepVersion) {
+  try {
+    for (const entry of fs.readdirSync(versionsDir)) {
+      if (entry === keepVersion || entry.endsWith(".tmp")) continue;
+      fs.rmSync(path.join(versionsDir, entry), { recursive: true, force: true });
+    }
+  } catch (_) {}
+}
+
+async function main() {
+  if (process.env.OPENARA_AUTO_UPDATE === "off") {
+    return;
+  }
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  const check = readCheck();
+  const lastCheckedAt = Number(check.checkedAt || 0);
+  if (
+    Date.now() - lastCheckedAt < CHECK_INTERVAL_MS &&
+    check.installedVersion === installedVersion &&
+    !process.env.OPENARA_AUTO_UPDATE_FORCE
+  ) {
+    return;
+  }
+
+  let metadata;
+  try {
+    metadata = await fetchJSON(REGISTRY_URL);
+  } catch (err) {
+    log(\`registry fetch failed: \${err.message}\`);
+    writeCheck({ ...check, checkedAt: Date.now(), installedVersion, lastError: err.message });
+    return;
+  }
+
+  const latestVersion = metadata.version;
+  const tarballURL = metadata.dist && metadata.dist.tarball;
+  if (!latestVersion || !tarballURL) {
+    log(\`malformed registry response\`);
+    writeCheck({ ...check, checkedAt: Date.now(), installedVersion });
+    return;
+  }
+
+  if (compareSemver(latestVersion, installedVersion) <= 0) {
+    writeCheck({ checkedAt: Date.now(), installedVersion, latestVersion });
+    return;
+  }
+
+  const targetVersionDir = path.join(versionsDir, latestVersion);
+  const targetApp = path.join(targetVersionDir, "dist", "OpenAra.app");
+  if (fs.existsSync(path.join(targetApp, "Contents", "Info.plist"))) {
+    swapSymlink(targetVersionDir);
+    writeCheck({ checkedAt: Date.now(), installedVersion, latestVersion, stagedAt: Date.now() });
+    log(\`re-linked to already-staged \${latestVersion}\`);
+    return;
+  }
+
+  log(\`downloading \${PACKAGE_NAME}@\${latestVersion}\`);
+  let tarball;
+  try {
+    tarball = await fetchBuffer(tarballURL);
+  } catch (err) {
+    log(\`tarball fetch failed: \${err.message}\`);
+    writeCheck({ ...check, checkedAt: Date.now(), installedVersion, latestVersion, lastError: err.message });
+    return;
+  }
+
+  fs.mkdirSync(downloadsDir, { recursive: true });
+  fs.mkdirSync(versionsDir, { recursive: true });
+  const tarballPath = path.join(downloadsDir, \`openara-cli-\${latestVersion}.tgz\`);
+  fs.writeFileSync(tarballPath, tarball);
+
+  const stagingDir = path.join(versionsDir, \`\${latestVersion}.tmp-\${process.pid}\`);
+  fs.rmSync(stagingDir, { recursive: true, force: true });
+  fs.mkdirSync(stagingDir, { recursive: true });
+
+  const tarResult = spawnSync("/usr/bin/tar", ["-xzf", tarballPath, "-C", stagingDir, "--strip-components=1"], {
+    stdio: "ignore",
+  });
+  if (tarResult.status !== 0) {
+    log(\`tar extract failed status=\${tarResult.status}\`);
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    writeCheck({ ...check, checkedAt: Date.now(), installedVersion, latestVersion, lastError: "tar failed" });
+    return;
+  }
+
+  const stagedApp = path.join(stagingDir, "dist", "OpenAra.app");
+  if (!fs.existsSync(path.join(stagedApp, "Contents", "Info.plist"))) {
+    log("staged tarball missing OpenAra.app");
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    writeCheck({ ...check, checkedAt: Date.now(), installedVersion, latestVersion, lastError: "missing app bundle" });
+    return;
+  }
+
+  spawnSync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", stagedApp], { stdio: "ignore" });
+
+  fs.rmSync(targetVersionDir, { recursive: true, force: true });
+  fs.renameSync(stagingDir, targetVersionDir);
+
+  swapSymlink(targetVersionDir);
+  cleanupOldVersions(latestVersion);
+  try { fs.unlinkSync(tarballPath); } catch (_) {}
+
+  writeCheck({ checkedAt: Date.now(), installedVersion, latestVersion, stagedAt: Date.now() });
+  log(\`staged \${latestVersion}; next launch will use it\`);
+}
+
+main().catch((err) => {
+  log(\`unexpected error: \${(err && err.stack) || err}\`);
+});
 `;
 }
 
@@ -549,6 +829,7 @@ function renderMetaPackageJson(packageName, version) {
       "scripts/install-opencode-mcp.sh",
       "scripts/install-codex-plugin.sh",
       "scripts/postinstall.mjs",
+      "scripts/auto-update.mjs",
       "README.md",
       "LICENSE",
     ],
@@ -622,6 +903,7 @@ function stageMetaPackage(packageName, version, outDir) {
   const launcher = renderLauncher();
   writeExecutable(path.join(packageRoot, "bin", "openara"), launcher);
   writeFileSync(path.join(packageRoot, "scripts", "postinstall.mjs"), renderPostinstall(packageName, version), "utf-8");
+  writeFileSync(path.join(packageRoot, "scripts", "auto-update.mjs"), renderAutoUpdater(packageName), "utf-8");
   writeFileSync(path.join(packageRoot, "README.md"), renderReadme(packageName, version), "utf-8");
   writeFileSync(path.join(packageRoot, "package.json"), `${JSON.stringify(renderMetaPackageJson(packageName, version), null, 2)}\n`, "utf-8");
 
