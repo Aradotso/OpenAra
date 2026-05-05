@@ -3,10 +3,15 @@ import Foundation
 /// File-append logger for OpenAra. Mirrors the queue-backed pattern used in
 /// AraDesktop so the broader Ara product line shares a single observability shape.
 ///
-/// Writes go to `/tmp/openara.log` (release) or `/tmp/openara-dev.log` (dev),
-/// chosen by bundle identifier suffix. Embedders can also subscribe in-process
-/// via ``OpenAraLogger/subscribe(_:)`` to receive structured records as they
-/// happen — useful for AraDesktop, smoke harnesses, and tests.
+/// Writes go to `~/Library/Logs/OpenAra/openara.log` (release) or
+/// `openara-dev.log` (dev), chosen by bundle identifier suffix. Files are
+/// created with mode 0600 so other local users cannot read them, and rotate
+/// when they exceed `logRotationByteLimit` (5 MB) — the previous file is kept
+/// as `.1` and a fresh empty file takes over. Set `OPENARA_LOG_DIR` to
+/// override the directory (used by tests and embedders). Embedders can also
+/// subscribe in-process via ``OpenAraLogger/subscribe(_:)`` to receive
+/// structured records as they happen — useful for AraDesktop, smoke
+/// harnesses, and tests.
 public enum OpenAraLogger {
     public enum Level: String, Sendable {
         case debug
@@ -80,10 +85,26 @@ public enum OpenAraLogger {
         return formatter
     }()
 
-    private static let logFilePath: String = {
+    /// Default rotation threshold. The previous file is kept as `<basename>.1`.
+    static let logRotationByteLimit: UInt64 = 5 * 1024 * 1024
+
+    private static let logFilePath: String = resolveLogPath()
+
+    private static func resolveLogPath() -> String {
         let bundleID = Bundle.main.bundleIdentifier ?? ""
-        return bundleID.hasSuffix(".dev") ? "/tmp/openara-dev.log" : "/tmp/openara.log"
-    }()
+        let basename = bundleID.hasSuffix(".dev") ? "openara-dev.log" : "openara.log"
+        let directory = resolveLogDirectory()
+        return (directory as NSString).appendingPathComponent(basename)
+    }
+
+    private static func resolveLogDirectory() -> String {
+        let environment = ProcessInfo.processInfo.environment
+        if let override = environment["OPENARA_LOG_DIR"], !override.isEmpty {
+            return (override as NSString).expandingTildeInPath
+        }
+        let home = NSHomeDirectory() as NSString
+        return home.appendingPathComponent("Library/Logs/OpenAra")
+    }
 
     private struct State {
         var nextSubscriberID: UInt64 = 0
@@ -131,15 +152,50 @@ public enum OpenAraLogger {
 
     private static func writeData(_ data: Data) {
         let path = logFilePath
-        if FileManager.default.fileExists(atPath: path) {
+        ensureLogDirectory(for: path)
+        rotateIfNeeded(path: path, additionalBytes: data.count)
+
+        let manager = FileManager.default
+        if manager.fileExists(atPath: path) {
             if let handle = FileHandle(forWritingAtPath: path) {
                 handle.seekToEndOfFile()
                 handle.write(data)
-                handle.closeFile()
+                try? handle.close()
             }
-        } else {
-            FileManager.default.createFile(atPath: path, contents: data)
+            return
         }
+
+        let attributes: [FileAttributeKey: Any] = [.posixPermissions: NSNumber(value: Int16(0o600))]
+        manager.createFile(atPath: path, contents: data, attributes: attributes)
+    }
+
+    private static func ensureLogDirectory(for path: String) {
+        let directory = (path as NSString).deletingLastPathComponent
+        if directory.isEmpty { return }
+        let manager = FileManager.default
+        var isDir: ObjCBool = false
+        if manager.fileExists(atPath: directory, isDirectory: &isDir), isDir.boolValue {
+            return
+        }
+        try? manager.createDirectory(
+            atPath: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: NSNumber(value: Int16(0o700))]
+        )
+    }
+
+    private static func rotateIfNeeded(path: String, additionalBytes: Int) {
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: path) else { return }
+        guard let attrs = try? manager.attributesOfItem(atPath: path),
+              let size = attrs[.size] as? UInt64 else { return }
+        if size + UInt64(additionalBytes) <= logRotationByteLimit { return }
+
+        let rotatedPath = path + ".1"
+        if manager.fileExists(atPath: rotatedPath) {
+            try? manager.removeItem(atPath: rotatedPath)
+        }
+        try? manager.moveItem(atPath: path, toPath: rotatedPath)
     }
 }
 

@@ -28,6 +28,12 @@ public final class StdioMCPServer {
         self.sessionID = StdioMCPServer.makeSessionID()
         self.pid = getpid()
         OpenAraLogger.info("\(logPrefix) session-start version=\(openAraVersion)", category: "mcp")
+        if argumentRedactionDisabled(environment: ProcessInfo.processInfo.environment) {
+            OpenAraLogger.warn(
+                "\(logPrefix) OPENARA_LOG_RAW_ARGS is set — tool arguments (including typed text and field values) will be written to the log in plaintext. Unset OPENARA_LOG_RAW_ARGS to restore redaction.",
+                category: "mcp"
+            )
+        }
     }
 
     public func run() throws {
@@ -108,7 +114,7 @@ public final class StdioMCPServer {
             case "tools/call":
                 let name = params["name"] as? String ?? ""
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
-                let argsRendered = renderArguments(arguments)
+                let argsRendered = renderArguments(toolName: name, arguments: arguments)
                 OpenAraLogger.info("\(logPrefix) tool-call name=\(name) args=\(argsRendered)", category: "mcp")
                 let targetApp = (arguments["app"] as? String) ?? (arguments["app_id"] as? String)
                 VisualCursorSupport.performOnMain {
@@ -195,9 +201,16 @@ public final class StdioMCPServer {
         String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
     }
 
-    private func renderArguments(_ arguments: [String: Any]) -> String {
+    private func renderArguments(toolName: String, arguments: [String: Any]) -> String {
+        let payload: [String: Any]
+        if argumentRedactionDisabled(environment: ProcessInfo.processInfo.environment) {
+            payload = arguments
+        } else {
+            payload = ArgumentRedactor.redact(toolName: toolName, arguments: arguments)
+        }
+
         guard
-            let data = try? JSONSerialization.data(withJSONObject: arguments, options: [.withoutEscapingSlashes, .sortedKeys]),
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.withoutEscapingSlashes, .sortedKeys]),
             let text = String(data: data, encoding: .utf8)
         else {
             return "{}"
