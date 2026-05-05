@@ -218,7 +218,9 @@ codesign_app_bundle() {
   fi
 
   if [[ "${identity}" != "-" ]]; then
-    args+=(--options runtime)
+    # Hardened Runtime + Apple secure timestamp are both required for
+    # `xcrun notarytool` to accept the bundle. Skip them only for ad-hoc.
+    args+=(--options runtime --timestamp)
   fi
 
   run_with_codesign_keychain "${codesign_keychain}" \
@@ -387,6 +389,12 @@ cat > "${contents_dir}/Info.plist" <<PLIST
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>${bundle_display_name} drives other apps through the macOS accessibility APIs so AI agents you connect via MCP can read window state and click, type, and scroll on your behalf.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>${bundle_display_name} sends Apple Events to focus and interact with other apps when accessibility actions need to fall back to scripted control.</string>
+  <key>NSScreenCaptureDescription</key>
+  <string>${bundle_display_name} captures the screen so MCP clients can see what the agent is looking at while it works.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>
