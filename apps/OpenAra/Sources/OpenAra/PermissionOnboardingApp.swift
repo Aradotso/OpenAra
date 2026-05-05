@@ -238,6 +238,7 @@ final class PermissionContentController: NSViewController {
     private let subtitleLabel = NSTextField(wrappingLabelWithString: "\(PermissionContentController.brandName) needs these permissions to use apps on your Mac.\nThese permissions are only used when you ask it to perform tasks.")
     private let cardsContainer = NSStackView()
     private let completionLabel = NSTextField(labelWithString: "All required permissions are enabled.")
+    private lazy var continueButton = PrimaryActionButton(title: "Continue", target: self, action: #selector(handleContinue))
     private let refreshTimerInterval: TimeInterval = 0.25
 
     private var activeGuidance: SystemPermissionKind?
@@ -273,7 +274,6 @@ final class PermissionContentController: NSViewController {
     private func refreshState() {
         let updated = PermissionDiagnostics.current()
         let previousGuidance = activeGuidance
-        let wasAllGranted = diagnostics.allGranted
         diagnostics = updated
 
         if let activeGuidance, updated.isGranted(activeGuidance) {
@@ -284,11 +284,6 @@ final class PermissionContentController: NSViewController {
 
         if previousGuidance != nil, activeGuidance == nil {
             delegate?.permissionContentControllerDidResolveGuidance(self)
-        }
-
-        if updated.allGranted, !wasAllGranted, !hasReportedCompletion {
-            hasReportedCompletion = true
-            delegate?.permissionContentControllerDidCompleteAllPermissions(self)
         }
     }
 
@@ -322,6 +317,9 @@ final class PermissionContentController: NSViewController {
         completionLabel.textColor = NSColor(calibratedRed: 0.16, green: 0.50, blue: 0.23, alpha: 1)
         completionLabel.isHidden = true
 
+        continueButton.isHidden = true
+        view.addSubview(continueButton)
+
         stackView.addArrangedSubview(iconView)
         stackView.addArrangedSubview(titleLabel)
         stackView.addArrangedSubview(subtitleLabel)
@@ -346,7 +344,21 @@ final class PermissionContentController: NSViewController {
             iconView.widthAnchor.constraint(equalToConstant: PermissionOnboardingLayout.headerIconSize),
             iconView.heightAnchor.constraint(equalToConstant: PermissionOnboardingLayout.headerIconSize),
             cardsContainer.widthAnchor.constraint(equalToConstant: PermissionOnboardingLayout.cardWidth),
+
+            continueButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PermissionOnboardingLayout.outerHorizontalInset),
+            continueButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -PermissionOnboardingLayout.outerBottomInset),
+            continueButton.widthAnchor.constraint(equalToConstant: 132),
+            continueButton.heightAnchor.constraint(equalToConstant: PermissionOnboardingLayout.actionButtonHeight),
         ])
+    }
+
+    @objc
+    private func handleContinue() {
+        guard diagnostics.allGranted, !hasReportedCompletion else {
+            return
+        }
+        hasReportedCompletion = true
+        delegate?.permissionContentControllerDidCompleteAllPermissions(self)
     }
 
     private func refreshUI() {
@@ -380,6 +392,7 @@ final class PermissionContentController: NSViewController {
         }
 
         completionLabel.isHidden = !diagnostics.allGranted
+        continueButton.isHidden = !diagnostics.allGranted
     }
 }
 
