@@ -1,13 +1,13 @@
 {
   "name": "openara",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "description": "OpenAra — open-source macOS Computer Use MCP server.",
   "author": {
     "name": "OpenAra",
-    "url": "https://github.com/Aradotso/ara-cua/tree/main/OpenAra"
+    "url": "https://github.com/Aradotso/OpenAra"
   },
-  "homepage": "https://github.com/Aradotso/ara-cua/tree/main/OpenAra",
-  "repository": "https://github.com/Aradotso/ara-cua",
+  "homepage": "https://github.com/Aradotso/OpenAra",
+  "repository": "https://github.com/Aradotso/OpenAra",
   "license": "MIT",
   "keywords": [
     "openara",
@@ -29,9 +29,9 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/Aradotso/ara-cua/tree/main/OpenAra",
-    "privacyPolicyURL": "https://github.com/Aradotso/ara-cua/blob/main/OpenAra/SECURITY.md",
-    "termsOfServiceURL": "https://github.com/Aradotso/ara-cua/blob/main/OpenAra/LICENSE",
+    "websiteURL": "https://github.com/Aradotso/OpenAra",
+    "privacyPolicyURL": "https://github.com/Aradotso/OpenAra/blob/main/SECURITY.md",
+    "termsOfServiceURL": "https://github.com/Aradotso/OpenAra/blob/main/LICENSE",
     "defaultPrompt": [
       "Inspect the current UI state of this desktop app without stealing focus when possible",
       "Open a new local document with keyboard shortcuts first, then type content without moving my real pointer unless required",

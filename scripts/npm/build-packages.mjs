@@ -772,7 +772,7 @@ openara install-codex-plugin
 - Supported npm platforms: \`darwin-arm64\`, \`darwin-x64\` (macOS only).
 - Requires \`Accessibility\` and \`Screen Recording\` permissions; \`openara doctor\` walks you through granting them.
 
-Source repository: https://github.com/Aradotso/ara-cua
+Source repository: https://github.com/Aradotso/OpenAra
 `;
 }
 
@@ -794,13 +794,13 @@ function renderMetaPackageJson(packageName, version) {
     version,
     description: "OpenAra — open-source macOS Computer Use MCP server. After install, run openara mcp.",
     license: "MIT",
-    homepage: "https://github.com/Aradotso/ara-cua",
+    homepage: "https://github.com/Aradotso/OpenAra",
     repository: {
       type: "git",
-      url: "git+https://github.com/Aradotso/ara-cua.git",
+      url: "git+https://github.com/Aradotso/OpenAra.git",
     },
     bugs: {
-      url: "https://github.com/Aradotso/ara-cua/issues",
+      url: "https://github.com/Aradotso/OpenAra/issues",
     },
     keywords: packageKeywords(),
     preferGlobal: true,
