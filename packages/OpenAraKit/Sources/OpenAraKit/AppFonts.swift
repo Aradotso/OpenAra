@@ -21,8 +21,7 @@ public enum AppFonts {
         didRegister = true
 
         for (resource, ext) in bundledFonts {
-            guard let url = Bundle.module.url(forResource: resource, withExtension: ext)
-                ?? Bundle.main.url(forResource: resource, withExtension: ext) else {
+            guard let url = OpenAraKitResources.url(forResource: resource, withExtension: ext) else {
                 continue
             }
             var error: Unmanaged<CFError>?

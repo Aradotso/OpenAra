@@ -5,7 +5,7 @@ public enum AppLogo {
     private static let resourceName = "openara-logo-512"
 
     public static func load() -> NSImage? {
-        if let url = Bundle.module.url(forResource: resourceName, withExtension: "png"),
+        if let url = OpenAraKitResources.url(forResource: resourceName, withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             return image
         }

@@ -345,11 +345,11 @@ func loadOpenAraCursorGlyphImage(variant: String = "orange") -> NSImage? {
     ]
 
     for name in candidates {
-        if let url = Bundle.module.url(forResource: name, withExtension: "png"),
+        if let url = OpenAraKitResources.url(forResource: name, withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             return image
         }
-        if let url = Bundle.module.url(forResource: "cursors/\(name)", withExtension: "png"),
+        if let url = OpenAraKitResources.url(forResource: "cursors/\(name)", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             return image
         }
@@ -365,7 +365,7 @@ func loadOpenAraCursorGlyphImage(variant: String = "orange") -> NSImage? {
 func loadReferenceCursorWindowImage() -> NSImage? {
     let resourceName = SoftwareCursorGlyphMetrics.referenceImageResourceName
 
-    if let url = Bundle.module.url(forResource: resourceName, withExtension: "png"),
+    if let url = OpenAraKitResources.url(forResource: resourceName, withExtension: "png"),
        let image = NSImage(contentsOf: url) {
         return image
     }
