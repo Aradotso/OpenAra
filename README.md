@@ -3,12 +3,11 @@
   <p><em>Open-source Computer Use, packaged as a local MCP server.</em></p>
 
   <p>
-    <a href="https://github.com/Aradotso/OpenAra/releases/latest"><img src="https://img.shields.io/badge/Download-Desktop%20App-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download Desktop App" /></a>
     <a href="https://chat.whatsapp.com/"><img src="https://img.shields.io/badge/Join-Community%20WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Join Community WhatsApp" /></a>
-    <a href="https://deepwiki.com/Aradotso/OpenAra"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
+    <a href="https://github.com/Aradotso/OpenAra/releases/latest"><img src="https://img.shields.io/badge/Download-for%20macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+    <a href="https://deepwiki.com/Aradotso/OpenAra"><img src="https://img.shields.io/badge/Ask-DeepWiki-7C3AED?style=for-the-badge" alt="Ask DeepWiki" /></a>
   </p>
 
-  <br />
   <img src="./assets/brand/openara-header.png" alt="OpenAra" width="260" />
 </div>
 
