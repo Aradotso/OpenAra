@@ -49,8 +49,22 @@ enum InputSimulation {
             return
         }
 
-        _ = app.runningApplication.activate(options: [.activateAllWindows])
-        Thread.sleep(forTimeInterval: 0.25)
+        // AX raise failed. The fallback (`runningApplication.activate`) yanks
+        // foreground focus away from whatever the user is doing, which breaks
+        // the README promise that "you keep using your computer while the
+        // agent works." Gate it behind an explicit opt-in so the default
+        // behavior is to prefer skipping the action over stealing focus.
+        let environment = ProcessInfo.processInfo.environment
+        if focusStealAllowed(environment: environment) {
+            _ = app.runningApplication.activate(options: [.activateAllWindows])
+            Thread.sleep(forTimeInterval: 0.25)
+            return
+        }
+
+        OpenAraLogger.warn(
+            "AX raise failed for pid=\(app.pid); skipping runningApplication.activate to avoid stealing focus. Set OPENARA_ALLOW_FOCUS_STEAL=1 to opt in.",
+            category: "input"
+        )
     }
 
     static func clickGlobally(at point: CGPoint, button: MouseButtonKind, clickCount: Int) throws {
@@ -156,6 +170,21 @@ enum InputSimulation {
     static func pressKey(_ specification: String, pid: pid_t) throws {
         let parsed = try KeyPressParser.parse(specification)
         var activeFlags: CGEventFlags = []
+        var pressedModifiers: [ParsedKeyPress.Modifier] = []
+
+        // If anything below throws after a modifier-down has been posted, this
+        // releases the modifier so the target app doesn't end up with a stuck
+        // cmd/shift/option/ctrl. The release events use a best-effort path that
+        // ignores CGEvent allocation failures — there is nothing useful we can
+        // do beyond trying.
+        defer {
+            for modifier in pressedModifiers.reversed() {
+                guard let event = CGEvent(keyboardEventSource: nil, virtualKey: modifier.keyCode, keyDown: false) else { continue }
+                event.flags = activeFlags
+                event.postToPid(pid)
+                activeFlags.remove(modifier.flag)
+            }
+        }
 
         for modifier in parsed.modifiers {
             guard let event = CGEvent(keyboardEventSource: nil, virtualKey: modifier.keyCode, keyDown: true) else {
@@ -165,6 +194,7 @@ enum InputSimulation {
             activeFlags.insert(modifier.flag)
             event.flags = activeFlags
             event.postToPid(pid)
+            pressedModifiers.append(modifier)
         }
 
         guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: parsed.keyCode, keyDown: true),
@@ -176,16 +206,6 @@ enum InputSimulation {
         keyUp.flags = activeFlags
         keyDown.postToPid(pid)
         keyUp.postToPid(pid)
-
-        for modifier in parsed.modifiers.reversed() {
-            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: modifier.keyCode, keyDown: false) else {
-                throw ComputerUseError.message("Failed to create modifier key up event.")
-            }
-
-            event.flags = activeFlags
-            event.postToPid(pid)
-            activeFlags.remove(modifier.flag)
-        }
 
         Thread.sleep(forTimeInterval: 0.1)
     }

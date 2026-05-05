@@ -113,6 +113,21 @@ func globalPointerFallbacksEnabled(environment: [String: String]) -> Bool {
     return ["1", "true", "yes", "on"].contains(rawValue)
 }
 
+/// `OPENARA_ALLOW_FOCUS_STEAL=1` opts into the legacy fallback that calls
+/// `runningApplication.activate(...)` when AX raise fails. Default is OFF
+/// because the activate call yanks the user's foreground app, which breaks
+/// the "you keep using your computer while the agent works" guarantee.
+func focusStealAllowed(environment: [String: String]) -> Bool {
+    guard let rawValue = environment["OPENARA_ALLOW_FOCUS_STEAL"]?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+    else {
+        return false
+    }
+
+    return ["1", "true", "yes", "on"].contains(rawValue)
+}
+
 func screenshotPixelScale(
     screenshotPixelSize: CGSize?,
     windowBounds: CGRect?

@@ -26,4 +26,15 @@ import Testing
                 #expect(!(globalPointerFallbacksEnabled(environment: ["OPENARA_ALLOW_GLOBAL_POINTER_FALLBACKS": "false"])))
     }
 
+    @Test func focusStealFlagDefaultsToDisabled() {
+                #expect(!(focusStealAllowed(environment: [:])))
+                #expect(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "1"]))
+                #expect(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "true"]))
+                #expect(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "yes"]))
+                #expect(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "ON"]))
+                #expect(!(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "0"])))
+                #expect(!(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "false"])))
+                #expect(!(focusStealAllowed(environment: ["OPENARA_ALLOW_FOCUS_STEAL": "off"])))
+    }
+
 }
