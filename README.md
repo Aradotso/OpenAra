@@ -1,7 +1,5 @@
 <div align="center">
-  <img src="./assets/brand/openara-cursor-lineup.png" alt="OpenAra brand cursors" width="420" />
-  <br />
-  <img src="./assets/app-icons/openara-1024.png" alt="OpenAra" width="96" />
+  <img src="./assets/brand/openara-header.png" alt="OpenAra" width="420" />
   <h1>OpenAra</h1>
   <p><em>Open-source Computer Use, packaged as a local MCP server.</em></p>
 
@@ -11,14 +9,6 @@
     <a href="https://deepwiki.com/Aradotso/OpenAra"><img src="https://img.shields.io/badge/Cognition-DeepWiki-7C3AED?style=for-the-badge" alt="Cognition DeepWiki" /></a>
   </p>
 </div>
-
----
-
-OpenAra is the open-source Computer Use server from [Ara](https://ara.so). Any AI agent or MCP client can plug into it to drive **macOS** apps — nine focused tools, accessibility-first execution, no cloud dependency.
-
-It's built on top of macOS Accessibility, so it can read app state and drive UI without rudely stealing your real cursor or focus when it doesn't have to.
-
-> **macOS only.** OpenAra is opinionated about Mac. Ara's product surface is Mac-first, and one OS done well beats three done partially.
 
 ---
 
