@@ -1,0 +1,10 @@
+{
+  "name": "openara-repo-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "npm:build": "node ./scripts/npm/build-packages.mjs",
+    "npm:pack": "./scripts/release-package.sh",
+    "npm:publish": "node ./scripts/npm/publish-packages.mjs"
+  }
+}

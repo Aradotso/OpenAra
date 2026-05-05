@@ -1,0 +1,643 @@
+#!/usr/bin/env node
+
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..", "..");
+const defaultOutDir = path.join(repoRoot, "dist", "npm");
+const appBundleName = "OpenAra.app";
+const appExecutableName = "OpenAra";
+const metaPackageNames = [
+  "@openara/cli",
+];
+const runtimeTargets = [
+  {
+    os: "darwin",
+    cpu: "arm64",
+    kind: "macos-app",
+    executablePath: ["dist", appBundleName, "Contents", "MacOS", appExecutableName],
+  },
+  {
+    os: "darwin",
+    cpu: "x64",
+    kind: "macos-app",
+    executablePath: ["dist", appBundleName, "Contents", "MacOS", appExecutableName],
+  },
+];
+const packageNames = [
+  ...metaPackageNames,
+];
+
+function parseArgs(argv) {
+  const options = {
+    arch: "universal",
+    configuration: "release",
+    outDir: defaultOutDir,
+    packageNames: [...packageNames],
+    skipBuild: false,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    switch (arg) {
+      case "--arch":
+        options.arch = argv[index + 1];
+        index += 1;
+        break;
+      case "--configuration":
+        options.configuration = argv[index + 1];
+        index += 1;
+        break;
+      case "--out-dir":
+        options.outDir = path.resolve(repoRoot, argv[index + 1]);
+        index += 1;
+        break;
+      case "--package":
+        options.packageNames = [argv[index + 1]];
+        index += 1;
+        break;
+      case "--skip-build":
+        options.skipBuild = true;
+        break;
+      case "-h":
+      case "--help":
+        printHelp();
+        process.exit(0);
+      default:
+        throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  for (const packageName of options.packageNames) {
+    if (!packageNames.includes(packageName)) {
+      throw new Error(`Unsupported package name: ${packageName}`);
+    }
+  }
+
+  return options;
+}
+
+function printHelp() {
+  process.stdout.write(`Usage: node ./scripts/npm/build-packages.mjs [options]
+
+Options:
+  --configuration debug|release
+  --arch native|arm64|x86_64|universal  macOS app build arch. Defaults to universal.
+  --out-dir <dir>
+  --package <package-name>
+  --skip-build
+
+Packages:
+${packageNames.map((name) => `  - ${name}`).join("\n")}
+`);
+}
+
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    stdio: "inherit",
+    ...options,
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}`);
+  }
+}
+
+function readJSON(filePath) {
+  return JSON.parse(readFileSync(filePath, "utf-8"));
+}
+
+function removeJunkFiles(targetPath) {
+  if (!existsSync(targetPath)) {
+    return;
+  }
+
+  const entryStat = statSync(targetPath);
+  if (entryStat.isDirectory()) {
+    for (const entry of readdirSync(targetPath)) {
+      removeJunkFiles(path.join(targetPath, entry));
+    }
+    return;
+  }
+
+  if (path.basename(targetPath) === ".DS_Store") {
+    unlinkSync(targetPath);
+  }
+}
+
+function ensureBuilt(configuration, arch) {
+  run(path.join(repoRoot, "scripts", "build-openara-app.sh"), [
+    "--configuration",
+    configuration,
+    "--arch",
+    arch,
+  ]);
+}
+
+function writeExecutable(filePath, content) {
+  writeFileSync(filePath, content, "utf-8");
+  chmodSync(filePath, 0o755);
+}
+
+function platformLaunchTable() {
+  return Object.fromEntries(
+    runtimeTargets.map((runtimeTarget) => [
+      `${runtimeTarget.os}-${runtimeTarget.cpu}`,
+      {
+        executablePath: runtimeTarget.executablePath,
+      },
+    ]),
+  );
+}
+
+function renderLauncher() {
+  return `#!/usr/bin/env node
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const platformPackages = ${JSON.stringify(platformLaunchTable(), null, 2)};
+const packageRoot = path.resolve(__dirname, "..");
+const args = process.argv.slice(2);
+const command = args[0] || "";
+const installCommands = new Map([
+  ["install-claude-mcp", "install-claude-mcp.sh"],
+  ["install-clauce-mcp", "install-claude-mcp.sh"],
+  ["install-gemini-mcp", "install-gemini-mcp.sh"],
+  ["install-codex-mcp", "install-codex-mcp.sh"],
+  ["install-opencode-mcp", "install-opencode-mcp.sh"],
+  ["install-codex-plugin", "install-codex-plugin.sh"],
+]);
+
+function printLauncherHelp() {
+  console.log(\`OpenAra
+
+Usage:
+  openara [command] [options]
+  openara
+
+Commands:
+  mcp                  Start the stdio MCP server.
+  doctor               Print permission status and launch onboarding if needed on macOS.
+  list-apps            Print running or recently used apps.
+  snapshot <app>       Print the current accessibility snapshot for an app.
+  call <tool>          Call one tool, or run a JSON array of tool calls.
+  turn-ended           Notify the running MCP process that the host turn ended.
+  install-claude-mcp   Install the MCP server into ~/.claude.json for this project.
+  install-gemini-mcp   Install the MCP server into Gemini CLI config.
+  install-codex-mcp    Install the MCP server into ~/.codex/config.toml.
+  install-opencode-mcp Install the MCP server into ~/.config/opencode.
+  install-codex-plugin Install this npm package into the local Codex plugin cache.
+  help [command]       Show general or command-specific help.
+  version              Print the CLI version.
+
+Global options:
+  -h, --help           Show help.
+  -v, --version        Show version.
+
+Notes:
+  This npm package bundles native runtimes for supported platforms and selects the current os-arch at launch.
+  Use 'openara help <command>' for command-specific help.\`);
+}
+
+function printInstallHelp(scriptName, usage) {
+  console.log(\`Usage:
+  \${usage}
+
+This helper updates a local MCP or plugin config to run:
+  openara mcp
+
+Script:
+  \${scriptName}\`);
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+function spawnAndExit(executable, executableArgs) {
+  const child = spawn(executable, executableArgs, {
+    stdio: "inherit",
+    windowsHide: false,
+  });
+
+  child.on("error", (error) => {
+    fail(\`Failed to start \${executable}: \${error.message}\`);
+  });
+
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.on(signal, () => {
+      child.kill(signal);
+    });
+  }
+
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.exit(1);
+    }
+    process.exit(code ?? 0);
+  });
+}
+
+function runInstallCommand(scriptName, scriptArgs) {
+  if (process.platform !== "darwin") {
+    fail(\`\${command} requires macOS. OpenAra is macOS-only.\`);
+  }
+
+  const scriptPath = path.join(packageRoot, "scripts", scriptName);
+  if (!fs.existsSync(scriptPath)) {
+    fail(\`Missing installer helper at \${scriptPath}.\`);
+  }
+
+  spawnAndExit(scriptPath, scriptArgs);
+}
+
+function resolveNativeExecutable() {
+  const platformKey = \`\${process.platform}-\${process.arch}\`;
+  const target = platformPackages[platformKey];
+  if (!target) {
+    const supported = Object.keys(platformPackages).sort().join(", ");
+    fail(\`Unsupported platform \${platformKey}. Supported platforms: \${supported}.\`);
+  }
+
+  if (process.platform === "darwin") {
+    const installedAppExecutable = "/Applications/OpenAra.app/Contents/MacOS/OpenAra";
+    if (fs.existsSync(installedAppExecutable)) {
+      return installedAppExecutable;
+    }
+  }
+
+  const executablePath = path.join(packageRoot, ...target.executablePath);
+  if (!fs.existsSync(executablePath)) {
+    fail(\`Missing bundled native runtime for \${platformKey} at \${executablePath}.
+
+Reinstall with:
+  npm install -g @openara/cli\`);
+  }
+
+  return executablePath;
+}
+
+if (command === "-h" || command === "--help" || (command === "help" && args.length <= 1)) {
+  printLauncherHelp();
+  process.exit(0);
+}
+
+if (command === "help" && args[1] === "install-codex-plugin") {
+  printInstallHelp("install-codex-plugin.sh", "openara install-codex-plugin");
+  process.exit(0);
+}
+
+if (command === "help" && args[1] === "install-codex-mcp") {
+  printInstallHelp("install-codex-mcp.sh", "openara install-codex-mcp");
+  process.exit(0);
+}
+
+if (command === "help" && args[1] === "install-gemini-mcp") {
+  printInstallHelp("install-gemini-mcp.sh", "openara install-gemini-mcp [--scope project|user]");
+  process.exit(0);
+}
+
+if (command === "help" && args[1] === "install-opencode-mcp") {
+  printInstallHelp("install-opencode-mcp.sh", "openara install-opencode-mcp");
+  process.exit(0);
+}
+
+if (command === "help" && (args[1] === "install-claude-mcp" || args[1] === "install-clauce-mcp")) {
+  printInstallHelp("install-claude-mcp.sh", "openara install-claude-mcp");
+  process.exit(0);
+}
+
+if (installCommands.has(command)) {
+  const scriptName = installCommands.get(command);
+  runInstallCommand(scriptName, args.slice(1));
+} else {
+  spawnAndExit(resolveNativeExecutable(), args);
+}
+`;
+}
+
+function renderPostinstall(packageName, version) {
+  return `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const mcpConfig = ${JSON.stringify({
+  mcpServers: {
+    "openara": {
+      command: "openara",
+      args: ["mcp"],
+    },
+  },
+}, null, 2)};
+
+const packageRoot = path.resolve(__dirname, "..");
+const sourceApp = path.join(packageRoot, "dist", "OpenAra.app");
+const targetApp = "/Applications/OpenAra.app";
+const lsregister = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister";
+
+function safeRun(label, cmd, args) {
+  try {
+    const result = spawnSync(cmd, args, { stdio: "ignore" });
+    return result.status === 0;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function installAppBundle() {
+  if (process.platform !== "darwin") return false;
+  if (!fs.existsSync(sourceApp)) return false;
+
+  try {
+    if (fs.existsSync(targetApp)) {
+      fs.rmSync(targetApp, { recursive: true, force: true });
+    }
+    spawnSync("/bin/cp", ["-R", sourceApp, targetApp], { stdio: "ignore" });
+    if (!fs.existsSync(path.join(targetApp, "Contents", "Info.plist"))) {
+      return false;
+    }
+    if (fs.existsSync(lsregister)) {
+      safeRun("lsregister", lsregister, ["-f", targetApp]);
+    }
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+const installed = installAppBundle();
+
+const lines = [
+  "",
+  "Installed ${packageName}@${version}.",
+  "Package: https://www.npmjs.com/package/${packageName}",
+  "Command: openara",
+];
+if (process.platform === "darwin") {
+  if (installed) {
+    lines.push("Installed " + targetApp + " for permission attribution.");
+  } else {
+    lines.push("Note: could not copy OpenAra.app to /Applications/. macOS System Settings may show a blank icon for the OpenAra TCC entry. Manual fix: cp -R " + sourceApp + " " + targetApp);
+  }
+}
+lines.push(
+  "",
+  "Next:",
+  "1. Run: openara",
+  "2. Grant Accessibility + Screen Recording in the onboarding window",
+  "3. Wire it into your agent: openara install-claude-mcp (or codex-mcp / gemini-mcp / opencode-mcp)",
+  "",
+  "Manual MCP config (if your client doesn't have an installer):",
+  JSON.stringify(mcpConfig, null, 2),
+  "",
+);
+for (const line of lines) {
+  console.log(line);
+}
+`;
+}
+
+function renderReadme(packageName, version) {
+  return `# ${packageName}
+
+npm distribution for **OpenAra** — the open-source macOS Computer Use MCP server.
+
+This package bundles a universal macOS runtime and the Node launcher selects the current \`process.platform\` / \`process.arch\` at runtime:
+
+${runtimeTargets.map((runtimeTarget) => `- \`${runtimeTarget.os}-${runtimeTarget.cpu}\``).join("\n")}
+
+Exposes a single global command:
+
+- \`openara\`
+
+## Install
+
+\`\`\`bash
+npm install -g ${packageName}
+\`\`\`
+
+The root launcher resolves the current \`process.platform\` / \`process.arch\` pair and runs the matching bundled native runtime.
+
+## MCP config
+
+If your MCP client accepts a stdio-style \`mcpServers\` JSON config, this is the default setup:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "openara": {
+      "command": "openara",
+      "args": ["mcp"]
+    }
+  }
+}
+\`\`\`
+
+Package page: https://www.npmjs.com/package/${packageName}
+
+## Use
+
+\`\`\`bash
+openara --version
+openara --help
+openara mcp
+openara call list_apps
+
+# macOS permission check and onboarding
+openara doctor
+
+# Installer helpers for MCP-capable CLIs
+openara install-claude-mcp
+openara install-gemini-mcp
+openara install-gemini-mcp --scope user
+openara install-codex-mcp
+openara install-opencode-mcp
+openara install-codex-plugin
+\`\`\`
+
+## Notes
+
+- Version: \`${version}\`
+- Supported npm platforms: \`darwin-arm64\`, \`darwin-x64\` (macOS only).
+- Requires \`Accessibility\` and \`Screen Recording\` permissions; \`openara doctor\` walks you through granting them.
+
+Source repository: https://github.com/Aradotso/ara-cua
+`;
+}
+
+function packageKeywords(extraKeywords = []) {
+  return [
+    "openara",
+    "computer-use",
+    "codex",
+    "mcp",
+    "macos",
+    "automation",
+    ...extraKeywords,
+  ];
+}
+
+function renderMetaPackageJson(packageName, version) {
+  return {
+    name: packageName,
+    version,
+    description: "OpenAra — open-source macOS Computer Use MCP server. After install, run openara mcp.",
+    license: "MIT",
+    homepage: "https://github.com/Aradotso/ara-cua",
+    repository: {
+      type: "git",
+      url: "git+https://github.com/Aradotso/ara-cua.git",
+    },
+    bugs: {
+      url: "https://github.com/Aradotso/ara-cua/issues",
+    },
+    keywords: packageKeywords(),
+    preferGlobal: true,
+    publishConfig: {
+      access: "public",
+    },
+    bin: {
+      "openara": "bin/openara",
+    },
+    scripts: {
+      postinstall: "node ./scripts/postinstall.mjs",
+    },
+    files: [
+      ".agents/plugins/marketplace.json",
+      "bin/",
+      "dist/OpenAra.app/",
+      "plugins/openara/.codex-plugin/",
+      "plugins/openara/.mcp.json",
+      "plugins/openara/assets/",
+      "plugins/openara/scripts/",
+      "scripts/install-claude-mcp.sh",
+      "scripts/install-gemini-mcp.sh",
+      "scripts/install-config-helper.mjs",
+      "scripts/install-codex-mcp.sh",
+      "scripts/install-opencode-mcp.sh",
+      "scripts/install-codex-plugin.sh",
+      "scripts/postinstall.mjs",
+      "README.md",
+      "LICENSE",
+    ],
+  };
+}
+
+function copyInstallerScripts(packageRoot) {
+  cpSync(path.join(repoRoot, "scripts", "install-claude-mcp.sh"), path.join(packageRoot, "scripts", "install-claude-mcp.sh"));
+  cpSync(path.join(repoRoot, "scripts", "install-gemini-mcp.sh"), path.join(packageRoot, "scripts", "install-gemini-mcp.sh"));
+  cpSync(path.join(repoRoot, "scripts", "install-config-helper.mjs"), path.join(packageRoot, "scripts", "install-config-helper.mjs"));
+  cpSync(path.join(repoRoot, "scripts", "install-codex-mcp.sh"), path.join(packageRoot, "scripts", "install-codex-mcp.sh"));
+  cpSync(path.join(repoRoot, "scripts", "install-opencode-mcp.sh"), path.join(packageRoot, "scripts", "install-opencode-mcp.sh"));
+  cpSync(path.join(repoRoot, "scripts", "install-codex-plugin.sh"), path.join(packageRoot, "scripts", "install-codex-plugin.sh"));
+
+  for (const scriptName of [
+    "install-claude-mcp.sh",
+    "install-gemini-mcp.sh",
+    "install-codex-mcp.sh",
+    "install-opencode-mcp.sh",
+    "install-codex-plugin.sh",
+  ]) {
+    chmodSync(path.join(packageRoot, "scripts", scriptName), 0o755);
+  }
+}
+
+function assertFileExists(filePath, packageName) {
+  if (!existsSync(filePath)) {
+    throw new Error(`Missing artifact for ${packageName}: ${filePath}. Run without --skip-build first.`);
+  }
+}
+
+function copyBundledRuntimes(packageRoot, packageName) {
+  const distRoot = path.join(packageRoot, "dist");
+  mkdirSync(distRoot, { recursive: true });
+
+  const macosSourcePath = path.join(repoRoot, "dist", appBundleName);
+  const macosDestinationPath = path.join(distRoot, appBundleName);
+  assertFileExists(macosSourcePath, packageName);
+  cpSync(macosSourcePath, macosDestinationPath, { recursive: true });
+
+  for (const runtimeTarget of runtimeTargets) {
+    const executablePath = path.join(packageRoot, ...runtimeTarget.executablePath);
+    assertFileExists(executablePath, packageName);
+  }
+}
+
+function stageDirNameFor(packageName) {
+  return packageName.replace(/^@/, "").replace(/\//g, "-");
+}
+
+function stageMetaPackage(packageName, version, outDir) {
+  const packageRoot = path.join(outDir, stageDirNameFor(packageName));
+  rmSync(packageRoot, { recursive: true, force: true });
+
+  mkdirSync(path.join(packageRoot, ".agents", "plugins"), { recursive: true });
+  mkdirSync(path.join(packageRoot, "bin"), { recursive: true });
+  mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+  mkdirSync(path.join(packageRoot, "plugins"), { recursive: true });
+  mkdirSync(path.join(packageRoot, "scripts"), { recursive: true });
+
+  cpSync(path.join(repoRoot, ".agents", "plugins", "marketplace.json"), path.join(packageRoot, ".agents", "plugins", "marketplace.json"));
+  cpSync(path.join(repoRoot, "plugins", "openara"), path.join(packageRoot, "plugins", "openara"), {
+    recursive: true,
+  });
+  cpSync(path.join(repoRoot, "LICENSE"), path.join(packageRoot, "LICENSE"));
+  copyBundledRuntimes(packageRoot, packageName);
+  copyInstallerScripts(packageRoot);
+
+  const launcher = renderLauncher();
+  writeExecutable(path.join(packageRoot, "bin", "openara"), launcher);
+  writeFileSync(path.join(packageRoot, "scripts", "postinstall.mjs"), renderPostinstall(packageName, version), "utf-8");
+  writeFileSync(path.join(packageRoot, "README.md"), renderReadme(packageName, version), "utf-8");
+  writeFileSync(path.join(packageRoot, "package.json"), `${JSON.stringify(renderMetaPackageJson(packageName, version), null, 2)}\n`, "utf-8");
+
+  removeJunkFiles(packageRoot);
+}
+
+function stagePackage(packageName, version, outDir) {
+  if (!metaPackageNames.includes(packageName)) {
+    throw new Error(`Unsupported package name: ${packageName}`);
+  }
+
+  stageMetaPackage(packageName, version, outDir);
+}
+
+function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const pluginManifestPath = path.join(repoRoot, "plugins", "openara", ".codex-plugin", "plugin.json");
+  const { version } = readJSON(pluginManifestPath);
+
+  if (!options.skipBuild) {
+    ensureBuilt(options.configuration, options.arch);
+  }
+
+  rmSync(options.outDir, { recursive: true, force: true });
+  mkdirSync(options.outDir, { recursive: true });
+
+  for (const packageName of options.packageNames) {
+    stagePackage(packageName, version, options.outDir);
+  }
+
+  process.stdout.write(`${options.outDir}\n`);
+}
+
+main();

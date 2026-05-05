@@ -1,0 +1,45 @@
+{
+  "name": "openara",
+  "version": "0.1.11",
+  "description": "OpenAra — open-source macOS Computer Use MCP server.",
+  "author": {
+    "name": "OpenAra",
+    "url": "https://github.com/Aradotso/ara-cua/tree/main/OpenAra"
+  },
+  "homepage": "https://github.com/Aradotso/ara-cua/tree/main/OpenAra",
+  "repository": "https://github.com/Aradotso/ara-cua",
+  "license": "MIT",
+  "keywords": [
+    "openara",
+    "computer-use",
+    "macos",
+    "automation",
+    "mcp",
+    "codex"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "OpenAra",
+    "shortDescription": "Control desktop apps from Codex with the OpenAra local server",
+    "longDescription": "OpenAra is an open-source macOS automation server for Computer Use. It exposes nine desktop-control MCP tools through a local macOS app bundle, preferring semantic Accessibility paths before falling back to coordinate input — so the agent can drive your apps without stealing focus or your real cursor.",
+    "developerName": "OpenAra",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/Aradotso/ara-cua/tree/main/OpenAra",
+    "privacyPolicyURL": "https://github.com/Aradotso/ara-cua/blob/main/OpenAra/SECURITY.md",
+    "termsOfServiceURL": "https://github.com/Aradotso/ara-cua/blob/main/OpenAra/LICENSE",
+    "defaultPrompt": [
+      "Inspect the current UI state of this desktop app without stealing focus when possible",
+      "Open a new local document with keyboard shortcuts first, then type content without moving my real pointer unless required",
+      "Drive the fixture app and verify the nine computer-use tools still behave correctly"
+    ],
+    "brandColor": "#0E7490",
+    "composerIcon": "./assets/openara-small.png",
+    "logo": "./assets/openara.png",
+    "screenshots": []
+  }
+}

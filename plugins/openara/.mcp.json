@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openara": {
+      "command": "./scripts/launch-openara.sh",
+      "cwd": "."
+    }
+  }
+}

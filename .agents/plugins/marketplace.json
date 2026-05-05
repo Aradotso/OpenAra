@@ -1,0 +1,20 @@
+{
+  "name": "openara-local",
+  "interface": {
+    "displayName": "OpenAra Local"
+  },
+  "plugins": [
+    {
+      "name": "openara",
+      "source": {
+        "source": "local",
+        "path": "./plugins/openara"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
