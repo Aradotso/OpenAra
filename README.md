@@ -1,9 +1,15 @@
 <div align="center">
-  <img src="./assets/brand/openara-cursor-lineup.png" alt="OpenAra brand cursors" width="720" />
+  <img src="./assets/brand/openara-cursor-lineup.png" alt="OpenAra brand cursors" width="420" />
   <br />
-  <img src="./assets/app-icons/openara-1024.png" alt="OpenAra" width="160" />
+  <img src="./assets/app-icons/openara-1024.png" alt="OpenAra" width="96" />
   <h1>OpenAra</h1>
   <p><em>Open-source Computer Use, packaged as a local MCP server.</em></p>
+
+  <p>
+    <a href="https://github.com/Aradotso/OpenAra/releases/latest"><img src="https://img.shields.io/badge/Download-Desktop%20App-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download Desktop App" /></a>
+    <a href="https://chat.whatsapp.com/"><img src="https://img.shields.io/badge/Join-Community%20WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Join Community WhatsApp" /></a>
+    <a href="https://deepwiki.com/Aradotso/OpenAra"><img src="https://img.shields.io/badge/Cognition-DeepWiki-7C3AED?style=for-the-badge" alt="Cognition DeepWiki" /></a>
+  </p>
 </div>
 
 ---
@@ -16,6 +22,71 @@ It's built on top of macOS Accessibility, so it can read app state and drive UI 
 
 ---
 
+## Install
+
+```bash
+npm i -g @openara/cli && openara
+```
+
+That installs the `openara` CLI, drops **OpenAra.app** into `/Applications`, and launches the first-run window so you can grant Accessibility + Screen Recording.
+
+> **Status:** the `@openara/cli` npm package is reserved on the registry but isn't shipping a real release yet. Until it does, drop down to [Build from source](#build-from-source) and substitute `swift run OpenAra` for `openara` in the commands below.
+
+---
+
+## Wire it into your agent
+
+Each command writes the appropriate config and exits — pick the one matching your agent.
+
+### Add to Claude Code
+
+```bash
+openara install-claude-mcp
+```
+
+Writes `mcpServers.openara` into `~/.claude.json`.
+
+### Add to Claude Desktop
+
+Use the Claude Code installer above — Claude Desktop reads the same MCP config:
+
+```bash
+openara install-claude-mcp
+```
+
+### Add to Codex CLI
+
+```bash
+openara install-codex-mcp
+```
+
+Writes `[mcp_servers.openara]` into `~/.codex/config.toml`.
+
+### Add to Codex App
+
+```bash
+openara install-codex-plugin
+```
+
+Installs OpenAra as a Codex plugin (manifest under `plugins/openara/`).
+
+### Add to Gemini CLI
+
+```bash
+openara install-gemini-mcp                # current project (./.gemini/settings.json)
+openara install-gemini-mcp --scope user   # global (~/.gemini/settings.json)
+```
+
+### Add to OpenCode
+
+```bash
+openara install-opencode-mcp
+```
+
+Writes `mcpServers.openara` into `~/.config/opencode/opencode.json`.
+
+---
+
 ## What it gives you
 
 - **A local Computer Use MCP server.** Nine well-tested desktop-control tools (`list_apps`, `get_app_state`, `click`, `type_text`, `press_key`, `set_value`, `scroll`, `drag`, `perform_secondary_action`) callable from any MCP-aware client.
@@ -23,49 +94,6 @@ It's built on top of macOS Accessibility, so it can read app state and drive UI 
 - **Accessibility-first execution.** Tries to drive UI through semantic AX paths before falling back to coordinate-level HID input — you keep using your computer while the agent works.
 - **One-line installers** for Claude Code, Codex CLI, Codex App (plugin), Gemini CLI, and OpenCode.
 - **Visible cursor overlay** when the agent does need to move a pointer, so you can see what it's about to do.
-
----
-
-## Install
-
-```bash
-# 1. Install the CLI
-npm i -g @openara/cli
-
-# 2. First run — opens permissions onboarding (Accessibility + Screen Recording)
-openara
-
-# 3. Wire it into the agent of your choice
-openara install-claude-mcp
-```
-
-> **Status:** the `@openara/cli` npm package is reserved on the registry but isn't shipping a real release yet. Until it does, drop down to [Build from source](#build-from-source) and substitute `swift run OpenAra` for `openara` in the commands below.
-
----
-
-## More
-
-Besides the MCP JSON config below, you can also use the built-in commands:
-
-```bash
-# Install into Codex by writing to ~/.codex/config.toml
-openara install-codex-mcp
-
-# Install as a Codex plugin, mainly for Codex App
-openara install-codex-plugin
-
-# Install into Claude Code by writing to ~/.claude.json
-openara install-claude-mcp
-
-# Install into Gemini CLI for the current project by writing to ./.gemini/settings.json
-openara install-gemini-mcp
-
-# Install into Gemini CLI user config instead
-openara install-gemini-mcp --scope user
-
-# Install into opencode by writing to ~/.config/opencode/opencode.json
-openara install-opencode-mcp
-```
 
 ---
 
