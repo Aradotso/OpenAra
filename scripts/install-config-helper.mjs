@@ -11,6 +11,8 @@ function fail(message) {
 function usage() {
   process.stdout.write(`Usage:
   node ./scripts/install-config-helper.mjs claude-mcp <config-path> <project-root> <server-name> <command-name>
+  node ./scripts/install-config-helper.mjs claude-desktop-mcp <config-path> <server-name> <command-name>
+  node ./scripts/install-config-helper.mjs cursor-mcp <config-path> <server-name> <command-name>
   node ./scripts/install-config-helper.mjs codex-mcp <config-path> <server-name> <command-name>
   node ./scripts/install-config-helper.mjs gemini-mcp <config-path> <server-name> <command-name>
   node ./scripts/install-config-helper.mjs opencode-mcp <primary-config-path> <secondary-config-path> <server-name> <command-name>
@@ -254,6 +256,51 @@ function installClaudeMcp(configPath, projectRoot, serverName, commandName) {
   }
 }
 
+function installFlatMcpServersConfig(configPath, serverName, commandName, label) {
+  const desiredEntry = {
+    command: commandName,
+    args: ["mcp"],
+  };
+  const legacyServerName = "openara";
+  const data = readJSONObjectConfig(configPath, `${label} config ${configPath}`);
+  const mcpServers = ensureObjectField(
+    data,
+    "mcpServers",
+    `Existing ${label} config has non-object "mcpServers"; refusing to modify it.`,
+  );
+
+  const target = mcpServers[serverName];
+  const legacy = mcpServers[legacyServerName];
+  const targetMatches = JSON.stringify(target) === JSON.stringify(desiredEntry);
+  const legacyMatches = JSON.stringify(legacy) === JSON.stringify(desiredEntry);
+
+  if (targetMatches && !legacyMatches) {
+    process.stdout.write(`${label} MCP server "${serverName}" is already installed in ${configPath}.\n`);
+    return;
+  }
+
+  mcpServers[serverName] = desiredEntry;
+  if (legacyMatches && legacyServerName !== serverName) {
+    delete mcpServers[legacyServerName];
+  }
+
+  writeJSONConfig(configPath, data);
+
+  if (targetMatches && legacyMatches && legacyServerName !== serverName) {
+    process.stdout.write(`${label} MCP server "${serverName}" was already installed; removed legacy alias "${legacyServerName}" from ${configPath}.\n`);
+  } else {
+    process.stdout.write(`Installed ${label} MCP server "${serverName}" into ${configPath}.\n`);
+  }
+}
+
+function installClaudeDesktopMcp(configPath, serverName, commandName) {
+  installFlatMcpServersConfig(configPath, serverName, commandName, "Claude Desktop");
+}
+
+function installCursorMcp(configPath, serverName, commandName) {
+  installFlatMcpServersConfig(configPath, serverName, commandName, "Cursor");
+}
+
 function installGeminiMcp(configPath, serverName, commandName) {
   const desiredEntry = {
     command: commandName,
@@ -484,6 +531,20 @@ function main(argv) {
         process.exit(1);
       }
       installClaudeMcp(...args);
+      return;
+    case "claude-desktop-mcp":
+      if (args.length !== 3) {
+        usage();
+        process.exit(1);
+      }
+      installClaudeDesktopMcp(...args);
+      return;
+    case "cursor-mcp":
+      if (args.length !== 3) {
+        usage();
+        process.exit(1);
+      }
+      installCursorMcp(...args);
       return;
     case "codex-mcp":
       if (args.length !== 3) {

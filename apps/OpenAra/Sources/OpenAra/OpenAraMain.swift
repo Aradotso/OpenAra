@@ -96,7 +96,8 @@ enum OpenAraMain {
                 \(permissions.summary)
 
                 You're all set. Next steps:
-                  openara install-claude-mcp     # wire into Claude Code
+                  openara install-claude-mcp     # wire into Claude Code + Claude Desktop
+                  openara install-cursor-mcp     # wire into Cursor
                   openara install-codex-mcp      # wire into Codex CLI
                   openara install-codex-plugin   # install as Codex App plugin
                   openara install-gemini-mcp     # wire into Gemini CLI

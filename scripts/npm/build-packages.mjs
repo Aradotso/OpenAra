@@ -179,6 +179,7 @@ const command = args[0] || "";
 const installCommands = new Map([
   ["install-claude-mcp", "install-claude-mcp.sh"],
   ["install-clauce-mcp", "install-claude-mcp.sh"],
+  ["install-cursor-mcp", "install-cursor-mcp.sh"],
   ["install-gemini-mcp", "install-gemini-mcp.sh"],
   ["install-codex-mcp", "install-codex-mcp.sh"],
   ["install-opencode-mcp", "install-opencode-mcp.sh"],
@@ -199,7 +200,8 @@ Commands:
   snapshot <app>       Print the current accessibility snapshot for an app.
   call <tool>          Call one tool, or run a JSON array of tool calls.
   turn-ended           Notify the running MCP process that the host turn ended.
-  install-claude-mcp   Install the MCP server into ~/.claude.json for this project.
+  install-claude-mcp   Install the MCP server into Claude Code (~/.claude.json) and Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json).
+  install-cursor-mcp   Install the MCP server into ~/.cursor/mcp.json.
   install-gemini-mcp   Install the MCP server into Gemini CLI config.
   install-codex-mcp    Install the MCP server into ~/.codex/config.toml.
   install-opencode-mcp Install the MCP server into ~/.config/opencode.
@@ -320,6 +322,11 @@ if (command === "help" && args[1] === "install-opencode-mcp") {
   process.exit(0);
 }
 
+if (command === "help" && args[1] === "install-cursor-mcp") {
+  printInstallHelp("install-cursor-mcp.sh", "openara install-cursor-mcp");
+  process.exit(0);
+}
+
 if (command === "help" && (args[1] === "install-claude-mcp" || args[1] === "install-clauce-mcp")) {
   printInstallHelp("install-claude-mcp.sh", "openara install-claude-mcp");
   process.exit(0);
@@ -408,7 +415,7 @@ lines.push(
   "Next:",
   "1. Run: openara",
   "2. Grant Accessibility + Screen Recording in the onboarding window",
-  "3. Wire it into your agent: openara install-claude-mcp (or codex-mcp / gemini-mcp / opencode-mcp)",
+  "3. Wire it into your agent: openara install-claude-mcp (or cursor-mcp / codex-mcp / gemini-mcp / opencode-mcp)",
   "",
   "Manual MCP config (if your client doesn't have an installer):",
   JSON.stringify(mcpConfig, null, 2),
@@ -471,6 +478,7 @@ openara doctor
 
 # Installer helpers for MCP-capable CLIs
 openara install-claude-mcp
+openara install-cursor-mcp
 openara install-gemini-mcp
 openara install-gemini-mcp --scope user
 openara install-codex-mcp
@@ -534,6 +542,7 @@ function renderMetaPackageJson(packageName, version) {
       "plugins/openara/assets/",
       "plugins/openara/scripts/",
       "scripts/install-claude-mcp.sh",
+      "scripts/install-cursor-mcp.sh",
       "scripts/install-gemini-mcp.sh",
       "scripts/install-config-helper.mjs",
       "scripts/install-codex-mcp.sh",
@@ -548,6 +557,7 @@ function renderMetaPackageJson(packageName, version) {
 
 function copyInstallerScripts(packageRoot) {
   cpSync(path.join(repoRoot, "scripts", "install-claude-mcp.sh"), path.join(packageRoot, "scripts", "install-claude-mcp.sh"));
+  cpSync(path.join(repoRoot, "scripts", "install-cursor-mcp.sh"), path.join(packageRoot, "scripts", "install-cursor-mcp.sh"));
   cpSync(path.join(repoRoot, "scripts", "install-gemini-mcp.sh"), path.join(packageRoot, "scripts", "install-gemini-mcp.sh"));
   cpSync(path.join(repoRoot, "scripts", "install-config-helper.mjs"), path.join(packageRoot, "scripts", "install-config-helper.mjs"));
   cpSync(path.join(repoRoot, "scripts", "install-codex-mcp.sh"), path.join(packageRoot, "scripts", "install-codex-mcp.sh"));
@@ -556,6 +566,7 @@ function copyInstallerScripts(packageRoot) {
 
   for (const scriptName of [
     "install-claude-mcp.sh",
+    "install-cursor-mcp.sh",
     "install-gemini-mcp.sh",
     "install-codex-mcp.sh",
     "install-opencode-mcp.sh",
