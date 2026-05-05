@@ -40,6 +40,7 @@ public final class StdioMCPServer {
                 FileHandle.standardOutput.write((response + "\n").data(using: .utf8)!)
             }
         }
+        CursorVariantRegistry.release(sessionID: sessionID)
         OpenAraLogger.info("\(logPrefix) session-end", category: "mcp")
     }
 
@@ -58,7 +59,15 @@ public final class StdioMCPServer {
                 if let info = params["clientInfo"] as? [String: Any], let name = info["name"] as? String {
                     clientName = name
                 }
-                let variant = OpenAraCursorVariant.resolve(client: clientName, pid: pid)
+                let envOverride = ProcessInfo.processInfo.environment["OPENARA_CURSOR_COLOR"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                let variant = CursorVariantRegistry.claim(
+                    client: clientName,
+                    sessionID: sessionID,
+                    pid: pid,
+                    envOverride: envOverride
+                )
                 VisualCursorSupport.performOnMain {
                     setOpenAraCursorVariant(variant)
                 }

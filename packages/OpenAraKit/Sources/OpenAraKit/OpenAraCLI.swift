@@ -8,6 +8,7 @@ public enum OpenAraCLICommand: Equatable {
     case snapshot(app: String)
     case call(OpenAraCallInvocation)
     case turnEnded(payload: String?)
+    case sessions
     case help(command: String?)
     case version
     case uninstall
@@ -66,6 +67,8 @@ public func parseOpenAraCLI(arguments: [String]) throws -> OpenAraCLICommand {
         return try parseCall(arguments: Array(arguments.dropFirst()))
     case "turn-ended":
         return try parseTurnEnded(arguments: Array(arguments.dropFirst()))
+    case "sessions":
+        return try parseSimpleCommand(name: "sessions", arguments: Array(arguments.dropFirst()), result: .sessions)
     case "snapshot":
         return try parseSnapshot(arguments: Array(arguments.dropFirst()))
     case "uninstall", "delete":
@@ -98,6 +101,7 @@ public func openAraHelpText(command: String? = nil) -> String {
           snapshot <app>       Print the current accessibility snapshot for an app.
           call <tool>           Call one tool, or run a JSON array of tool calls.
           turn-ended           Notify the running MCP process that the host turn ended.
+          sessions             List active OpenAra MCP sessions and their cursor colors.
           update               Upgrade to the latest @openara/cli on npm.
           uninstall            Remove /Applications/OpenAra.app and reset bundle-id TCC entries.
           help [command]       Show general or command-specific help.

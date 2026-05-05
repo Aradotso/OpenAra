@@ -39,8 +39,12 @@ struct SoftwareCursorGlyphRenderState {
 }
 
 enum SoftwareCursorGlyphMetrics {
-    static let windowSize = CGSize(width: 126, height: 126)
-    static let tipAnchor = CGPoint(x: 60.35, y: 70.3)
+    // Window + tip anchor were originally calibrated at 126x126 with the tip at
+    // (60.35, 70.3). Shrunk uniformly by ~30% so the cursor reads as a
+    // companion glyph instead of a giant overlay blob, while preserving the
+    // tip-to-target alignment.
+    static let windowSize = CGSize(width: 88, height: 88)
+    static let tipAnchor = CGPoint(x: 42.15, y: 49.10)
     static let referenceImageResourceName = "official-software-cursor-window-252"
 
     static let pointerSize = CGSize(width: 21, height: 21)

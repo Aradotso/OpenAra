@@ -15,9 +15,9 @@ import Testing
     }
 
     @Test func softwareCursorGlyphMetricsMatchRuntimeProceduralCalibration() {
-                #expect(SoftwareCursorGlyphMetrics.windowSize == CGSize(width: 126, height: 126))
-                #expect(abs((SoftwareCursorGlyphMetrics.tipAnchor.x) - (60.35)) < 0.01)
-                #expect(abs((SoftwareCursorGlyphMetrics.tipAnchor.y) - (70.3)) < 0.01)
+                #expect(SoftwareCursorGlyphMetrics.windowSize == CGSize(width: 88, height: 88))
+                #expect(abs((SoftwareCursorGlyphMetrics.tipAnchor.x) - (42.15)) < 0.01)
+                #expect(abs((SoftwareCursorGlyphMetrics.tipAnchor.y) - (49.10)) < 0.01)
                 #expect(SoftwareCursorGlyphMetrics.referenceImageResourceName == "official-software-cursor-window-252")
     }
 

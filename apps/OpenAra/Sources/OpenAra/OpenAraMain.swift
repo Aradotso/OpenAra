@@ -74,6 +74,8 @@ enum OpenAraMain {
         case .turnEnded:
             postOpenAraTurnEndedNotification()
             print("turn-ended acknowledged")
+        case .sessions:
+            printSessionsTable()
         case let .help(command):
             print(openAraHelpText(command: command))
         case .version:
@@ -119,6 +121,56 @@ enum OpenAraMain {
         case .some(true): return "true"
         case .some(false): return "false"
         }
+    }
+
+    private static func printSessionsTable() {
+        let claims = CursorVariantRegistry.activeClaims()
+        if claims.isEmpty {
+            print("No active OpenAra sessions.")
+            return
+        }
+        let rows: [(String, String, String, String, String)] = claims
+            .sorted(by: { $0.startedAt < $1.startedAt })
+            .map { claim in
+                (
+                    claim.color,
+                    truncate(claim.client, 14),
+                    String(claim.pid),
+                    claim.sessionID,
+                    claim.startedAt
+                )
+            }
+        let header = ("COLOR", "CLIENT", "PID", "SESSION", "STARTED")
+        let widths = (
+            max(header.0.count, rows.map(\.0.count).max() ?? 0),
+            max(header.1.count, rows.map(\.1.count).max() ?? 0),
+            max(header.2.count, rows.map(\.2.count).max() ?? 0),
+            max(header.3.count, rows.map(\.3.count).max() ?? 0),
+            max(header.4.count, rows.map(\.4.count).max() ?? 0)
+        )
+        let formatted: (String, String, String, String, String) -> String = { c, cl, p, s, st in
+            [
+                pad(c, widths.0),
+                pad(cl, widths.1),
+                pad(p, widths.2),
+                pad(s, widths.3),
+                pad(st, widths.4),
+            ].joined(separator: "  ")
+        }
+        let headerLine = formatted(header.0, header.1, header.2, header.3, header.4)
+        print(headerLine)
+        print(String(repeating: "─", count: headerLine.count))
+        for row in rows {
+            print(formatted(row.0, row.1, row.2, row.3, row.4))
+        }
+    }
+
+    private static func pad(_ s: String, _ width: Int) -> String {
+        s.count >= width ? s : s + String(repeating: " ", count: width - s.count)
+    }
+
+    private static func truncate(_ s: String, _ n: Int) -> String {
+        s.count <= n ? s : String(s.prefix(n - 1)) + "…"
     }
 
     @MainActor
