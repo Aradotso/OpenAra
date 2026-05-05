@@ -3,7 +3,7 @@
   <p><em>Open-source Computer Use, packaged as a local MCP server.</em></p>
 
   <p>
-    <a href="https://chat.whatsapp.com/"><img src="https://img.shields.io/badge/Join-Community%20WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Join Community WhatsApp" /></a>
+    <a href="https://chat.whatsapp.com/"><img src="https://img.shields.io/badge/Join-Community-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Join Community" /></a>
     <a href="https://github.com/Aradotso/OpenAra/releases/latest"><img src="https://img.shields.io/badge/Download-for%20macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
     <a href="https://deepwiki.com/Aradotso/OpenAra"><img src="https://img.shields.io/badge/Ask-DeepWiki-7C3AED?style=for-the-badge" alt="Ask DeepWiki" /></a>
   </p>
@@ -21,21 +21,21 @@ npm i -g @openara/cli && openara
 
 ---
 
-### Add to Claude Code
+### Add to Claude Code / Claude Desktop
 
 ```bash
 openara install-claude-mcp
 ```
 
-Writes `mcpServers.openara` into `~/.claude.json`.
+Writes `mcpServers.openara` into both `~/.claude.json` (Claude Code) and `~/Library/Application Support/Claude/claude_desktop_config.json` (Claude Desktop).
 
-### Add to Claude Desktop
-
-Use the Claude Code installer above — Claude Desktop reads the same MCP config:
+### Add to Cursor
 
 ```bash
-openara install-claude-mcp
+openara install-cursor-mcp
 ```
+
+Writes `mcpServers.openara` into `~/.cursor/mcp.json`.
 
 ### Add to Codex CLI
 
@@ -75,7 +75,7 @@ Writes `mcpServers.openara` into `~/.config/opencode/opencode.json`.
 - **A local Computer Use MCP server.** Nine well-tested desktop-control tools (`list_apps`, `get_app_state`, `click`, `type_text`, `press_key`, `set_value`, `scroll`, `drag`, `perform_secondary_action`) callable from any MCP-aware client.
 - **Native macOS Swift** runtime — built on Accessibility + AppKit, no Electron, no Python.
 - **Accessibility-first execution.** Tries to drive UI through semantic AX paths before falling back to coordinate-level HID input — you keep using your computer while the agent works.
-- **One-line installers** for Claude Code, Codex CLI, Codex App (plugin), Gemini CLI, and OpenCode.
+- **One-line installers** for Claude Code, Claude Desktop, Cursor, Codex CLI, Codex App (plugin), Gemini CLI, and OpenCode.
 - **Visible cursor overlay** when the agent does need to move a pointer, so you can see what it's about to do.
 
 ---
@@ -86,7 +86,37 @@ If your agent doesn't have an installer above, or you want to see exactly what's
 
 ### Claude Code
 
-Add to your project's `.claude.json`:
+Add to your project's `.claude.json` (or `~/.claude.json` for global):
+
+```json
+{
+  "mcpServers": {
+    "openara": {
+      "command": "openara",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "openara": {
+      "command": "openara",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `~/.cursor/mcp.json` (or `<project>/.cursor/mcp.json` for project-scoped):
 
 ```json
 {
@@ -165,7 +195,8 @@ openara call get_app_state --args '{"app":"TextEdit"}'
 openara call --calls '[{"tool":"get_app_state","args":{"app":"TextEdit"}}]'
 openara call --calls-file examples/textedit-overlay-seq.json --sleep 0.5
 openara doctor                                   # permissions check
-openara install-claude-mcp                       # write Claude Code config
+openara install-claude-mcp                       # write Claude Code + Claude Desktop config
+openara install-cursor-mcp                       # write Cursor config
 openara install-codex-mcp                        # write Codex CLI config
 openara install-codex-plugin                     # install as Codex plugin
 openara install-gemini-mcp [--scope user]        # write Gemini CLI config
