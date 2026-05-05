@@ -29,18 +29,43 @@ extension Tool {
 
 /// Read a required string argument. Throws ``ComputerUseError/missingArgument``
 /// when the key is missing or empty so the MCP client gets a uniform message.
+/// Numeric JSON values (Int, Double, NSNumber) are stringified — fields whose
+/// schema says "string" but whose natural form is integer (e.g. `element_index`)
+/// shouldn't reject the natural form.
 public func requireToolString(_ key: String, in arguments: [String: Any]) throws -> String {
-    guard let value = arguments[key] as? String, !value.isEmpty else {
+    guard let value = optionalToolString(key, in: arguments), !value.isEmpty else {
         throw ComputerUseError.missingArgument(key)
     }
     return value
 }
 
-/// Read an optional string argument; returns nil when the key is absent or has
-/// the wrong type. Empty strings are returned as-is — emptiness matters for
-/// some tools and not others.
+/// Read an optional string argument; returns nil when the key is absent.
+/// Numeric JSON values are stringified so callers who write `"element_index": 8`
+/// (the natural integer form) don't get silently rejected by tools whose schema
+/// happens to declare the field as a string. Empty strings are returned as-is
+/// — emptiness matters for some tools and not others.
 public func optionalToolString(_ key: String, in arguments: [String: Any]) -> String? {
-    arguments[key] as? String
+    guard let raw = arguments[key] else { return nil }
+    if let text = raw as? String { return text }
+    if let integer = raw as? Int { return String(integer) }
+    if let double = raw as? Double {
+        if double == double.rounded(), abs(double) < Double(Int.max) {
+            return String(Int(double))
+        }
+        return String(double)
+    }
+    if let number = raw as? NSNumber {
+        // NSNumber covers both bool and numeric — treat bool as itself, numeric as int when whole.
+        if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            return number.boolValue ? "true" : "false"
+        }
+        let asDouble = number.doubleValue
+        if asDouble == asDouble.rounded(), abs(asDouble) < Double(Int.max) {
+            return String(number.intValue)
+        }
+        return number.stringValue
+    }
+    return nil
 }
 
 /// Read a required numeric argument as Double. Accepts JSON numbers in any
