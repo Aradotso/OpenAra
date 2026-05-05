@@ -26,9 +26,10 @@ final class MCPAppRuntime: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let selfObject = openAraTurnEndedNotificationObject(pid: getpid())
         turnEndedObserver = DistributedNotificationCenter.default().addObserver(
             forName: openAraTurnEndedNotificationName,
-            object: nil,
+            object: selfObject,
             queue: .main
         ) { _ in
             Task { @MainActor in

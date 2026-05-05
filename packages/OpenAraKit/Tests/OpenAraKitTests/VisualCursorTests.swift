@@ -113,4 +113,38 @@ import Testing
                 #expect(abs((visualCursorAppKitForwardHeading( renderRotation: 0, artworkNeutralHeading: SoftwareCursorGlyphMetrics.targetNeutralHeading )) - (3 * CGFloat.pi / 4)) < 0.0001)
     }
 
+    @Test func cursorVariantResolveIsDeterministicForSameInputs() {
+        let a = OpenAraCursorVariant.resolve(client: "claude-code", pid: 1234)
+        let b = OpenAraCursorVariant.resolve(client: "claude-code", pid: 1234)
+        #expect(a == b)
+        #expect(OpenAraCursorVariant.all.contains(a))
+    }
+
+    @Test func cursorVariantResolveDiffersAcrossPIDsForSameClient() {
+        let pids: [Int32] = [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008]
+        let assignments = Set(pids.map { OpenAraCursorVariant.resolve(client: "claude-code", pid: $0) })
+        // 8 PIDs across 6 variants — at least 3 distinct colors should appear.
+        #expect(assignments.count >= 3)
+    }
+
+    @Test func cursorVariantResolveHonorsEnvOverride() {
+        setenv("OPENARA_CURSOR_COLOR", "green", 1)
+        defer { unsetenv("OPENARA_CURSOR_COLOR") }
+        #expect(OpenAraCursorVariant.resolve(client: "claude-code", pid: 1234) == "green")
+    }
+
+    @Test func cursorVariantResolveIgnoresInvalidEnvOverride() {
+        setenv("OPENARA_CURSOR_COLOR", "chartreuse", 1)
+        defer { unsetenv("OPENARA_CURSOR_COLOR") }
+        let resolved = OpenAraCursorVariant.resolve(client: "claude-code", pid: 1234)
+        #expect(OpenAraCursorVariant.all.contains(resolved))
+        #expect(resolved != "chartreuse")
+    }
+
+    @Test func loadOpenAraCursorGlyphImageFindsBlueVariant() throws {
+        let image = try #require(loadOpenAraCursorGlyphImage(variant: "blue"))
+        let bitmap = try #require(image.representations.first)
+        #expect(bitmap.pixelsWide >= 200)
+    }
+
 }

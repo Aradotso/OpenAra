@@ -134,10 +134,18 @@ public func visualCursorObservationFileURL(environment: [String: String]) -> URL
 
 public let openAraTurnEndedNotificationName = Notification.Name("so.ara.openara.turn-ended")
 
-public func postOpenAraTurnEndedNotification() {
+/// Build the per-process `object` filter used to address turn-ended notifications.
+/// `DistributedNotificationCenter` matches `object` strings exactly, so each
+/// running OpenAra process only honors notifications addressed to its own PID.
+public func openAraTurnEndedNotificationObject(pid: Int32) -> String {
+    "pid:\(pid)"
+}
+
+public func postOpenAraTurnEndedNotification(targetPID: Int32? = nil) {
+    let object = targetPID.map(openAraTurnEndedNotificationObject(pid:))
     DistributedNotificationCenter.default().postNotificationName(
         openAraTurnEndedNotificationName,
-        object: nil,
+        object: object,
         userInfo: nil,
         deliverImmediately: true
     )
@@ -146,6 +154,11 @@ public func postOpenAraTurnEndedNotification() {
 @MainActor
 public func resetOpenAraVisualCursor() {
     SoftwareCursorOverlay.reset()
+}
+
+@MainActor
+public func setOpenAraCursorVariant(_ variant: String) {
+    SoftwareCursorGlyphRenderer.setCursorVariant(variant)
 }
 
 struct CursorTargetWindow: Equatable, Sendable {

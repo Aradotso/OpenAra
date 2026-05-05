@@ -19,9 +19,15 @@ Ask the user before taking destructive or externally visible actions such as sen
 
 public final class StdioMCPServer {
     private let registry: ToolRegistry
+    public let sessionID: String
+    public let pid: Int32
+    private var clientName: String = "unknown"
 
     public init(service: ComputerUseService = ComputerUseService()) {
         self.registry = ToolRegistry(service: service)
+        self.sessionID = StdioMCPServer.makeSessionID()
+        self.pid = getpid()
+        OpenAraLogger.info("\(logPrefix) session-start version=\(openAraVersion)", category: "mcp")
     }
 
     public func run() throws {
@@ -34,6 +40,7 @@ public final class StdioMCPServer {
                 FileHandle.standardOutput.write((response + "\n").data(using: .utf8)!)
             }
         }
+        OpenAraLogger.info("\(logPrefix) session-end", category: "mcp")
     }
 
     public func handle(line: String) -> String? {
@@ -48,6 +55,14 @@ public final class StdioMCPServer {
 
             switch method {
             case "initialize":
+                if let info = params["clientInfo"] as? [String: Any], let name = info["name"] as? String {
+                    clientName = name
+                }
+                let variant = OpenAraCursorVariant.resolve(client: clientName, pid: pid)
+                VisualCursorSupport.performOnMain {
+                    setOpenAraCursorVariant(variant)
+                }
+                OpenAraLogger.info("\(logPrefix) initialize cursor_variant=\(variant)", category: "mcp")
                 return try encodeJSONRPCResult(
                     id: id,
                     result: [
@@ -67,6 +82,7 @@ public final class StdioMCPServer {
             case "notifications/initialized":
                 return nil
             case "notifications/turn-ended":
+                OpenAraLogger.info("\(logPrefix) turn-ended", category: "mcp")
                 VisualCursorSupport.performOnMain {
                     SoftwareCursorOverlay.reset()
                 }
@@ -83,10 +99,17 @@ public final class StdioMCPServer {
             case "tools/call":
                 let name = params["name"] as? String ?? ""
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
-                OpenAraLogger.info("tools/call name=\(name) args_keys=\(Array(arguments.keys).sorted())", category: "mcp")
+                let argsRendered = renderArguments(arguments)
+                OpenAraLogger.info("\(logPrefix) tool-call name=\(name) args=\(argsRendered)", category: "mcp")
+                let started = Date()
                 let result = try registry.callTool(name: name, arguments: arguments)
-                if result.isError {
-                    OpenAraLogger.warn("tools/call name=\(name) returned isError=true", category: "mcp")
+                let duration = Int(Date().timeIntervalSince(started) * 1000)
+                let status = result.isError ? "error" : "ok"
+                let level: OpenAraLogger.Level = result.isError ? .warn : .info
+                let outcome = "\(logPrefix) tool-result name=\(name) status=\(status) duration_ms=\(duration)"
+                switch level {
+                case .warn: OpenAraLogger.warn(outcome, category: "mcp")
+                default: OpenAraLogger.info(outcome, category: "mcp")
                 }
                 return try encodeJSONRPCResult(
                     id: id,
@@ -148,6 +171,30 @@ public final class StdioMCPServer {
             throw ComputerUseError.message("Failed to encode JSON-RPC response.")
         }
 
+        return text
+    }
+
+    private var logPrefix: String {
+        "session=\(sessionID) pid=\(pid) client=\(clientName)"
+    }
+
+    private static func makeSessionID() -> String {
+        String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
+    }
+
+    private func renderArguments(_ arguments: [String: Any]) -> String {
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: arguments, options: [.withoutEscapingSlashes, .sortedKeys]),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return "{}"
+        }
+
+        let limit = 400
+        if text.count > limit {
+            let truncated = text.prefix(limit)
+            return "\(truncated)…(+\(text.count - limit) chars)"
+        }
         return text
     }
 }

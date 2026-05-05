@@ -55,9 +55,40 @@ private enum SoftwareCursorGlyphColors {
     static let pointerStroke = NSColor(calibratedWhite: 0.90, alpha: 0.92)
 }
 
+public enum OpenAraCursorVariant {
+    public static let all: [String] = ["orange", "blue", "green", "pink", "graphite", "white"]
+
+    public static func resolve(client: String?, pid: Int32) -> String {
+        let env = ProcessInfo.processInfo.environment["OPENARA_CURSOR_COLOR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if let env, all.contains(env) {
+            return env
+        }
+        let trimmed = (client ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var seed: UInt64 = UInt64(bitPattern: Int64(pid))
+        for byte in trimmed.utf8 {
+            seed = seed &* 1099511628211 &+ UInt64(byte)
+        }
+        return all[Int(seed % UInt64(all.count))]
+    }
+}
+
+@MainActor
 enum SoftwareCursorGlyphRenderer {
-    private static let openAraGlyph = loadOpenAraCursorGlyphImage()
+    private static var openAraGlyph: NSImage? = loadOpenAraCursorGlyphImage(variant: currentVariant)
     private static let referenceImage = loadReferenceCursorWindowImage()
+    private static var currentVariant: String = OpenAraCursorVariant.resolve(client: nil, pid: getpid())
+
+    static func setCursorVariant(_ variant: String) {
+        guard variant != currentVariant else { return }
+        currentVariant = variant
+        openAraGlyph = loadOpenAraCursorGlyphImage(variant: variant)
+    }
+
+    static var activeVariant: String {
+        currentVariant
+    }
 
     static func draw(
         in bounds: CGRect,
@@ -303,17 +334,25 @@ enum SoftwareCursorGlyphRenderer {
     }
 }
 
-func loadOpenAraCursorGlyphImage() -> NSImage? {
-    let resourceName = "openara-cursor-256"
+func loadOpenAraCursorGlyphImage(variant: String = "orange") -> NSImage? {
+    let candidates = [
+        "openara-cursor-\(variant)-256",
+        "openara-cursor-256",
+    ]
 
-    if let url = Bundle.module.url(forResource: resourceName, withExtension: "png"),
-       let image = NSImage(contentsOf: url) {
-        return image
-    }
-
-    if let url = Bundle.main.url(forResource: resourceName, withExtension: "png"),
-       let image = NSImage(contentsOf: url) {
-        return image
+    for name in candidates {
+        if let url = Bundle.module.url(forResource: name, withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let url = Bundle.module.url(forResource: "cursors/\(name)", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let url = Bundle.main.url(forResource: name, withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
     }
 
     return nil
