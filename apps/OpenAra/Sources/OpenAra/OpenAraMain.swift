@@ -132,6 +132,16 @@ enum OpenAraMain {
     /// Skipped when another OpenAra GUI process is already running, so a
     /// fast-cycling MCP client can't spawn five onboarding windows.
     private static func surfaceOnboardingIfPermissionsMissing() {
+        // Hosts that own their own permission UI (e.g. Ara Desktop has a
+        // Settings → General "Open Doctor" card + onboarding cards) can
+        // set OPENARA_SKIP_AUTO_ONBOARDING=1 to suppress this auto-spawn.
+        // Without the opt-out, every bridge restart spawned a new "Enable
+        // Ara" window — which the user reported as "I get this screen
+        // twice on every launch" because both the floating-bar warmup
+        // sessions and the explicit per-query bridge starts triggered it.
+        if ProcessInfo.processInfo.environment["OPENARA_SKIP_AUTO_ONBOARDING"] == "1" {
+            return
+        }
         let permissions = PermissionDiagnostics.current()
         guard !permissions.allGranted else { return }
 
