@@ -123,11 +123,17 @@ enum SoftwareCursorGlyphRenderer {
     private static let referenceImage = loadReferenceCursorWindowImage()
     private static var currentVariant: String = OpenAraCursorVariant.resolve(client: nil, pid: getpid())
 
-    /// Tab-derived tint applied on top of whichever glyph (PNG or
-    /// procedural fallback) is being drawn. `nil` = no tint, glyph
-    /// renders in its natural colours. Set at MCP `initialize` from
-    /// `OPENARA_CURSOR_INDEX` and never changes afterwards (each MCP
-    /// child belongs to exactly one tab for its whole lifetime).
+    /// Tab-derived tint applied on top of the bundled cursor PNG.
+    /// `nil` = no tint, glyph renders in its natural colours. Set at MCP
+    /// `initialize` from `OPENARA_CURSOR_INDEX` and never changes
+    /// afterwards (each MCP child belongs to exactly one tab for its
+    /// whole lifetime).
+    /// **Scope:** the tint is only applied in the PNG-glyph draw path
+    /// (`drawOpenAraGlyph`). The reference-image and procedural-pointer
+    /// fallbacks below keep their original hard-coded fill, since those
+    /// paths only fire when the bundled glyph PNGs are missing — i.e.
+    /// during local development on a stripped build, where matching the
+    /// host tab's colour is not load-bearing.
     private static var currentTint: NSColor? = OpenAraCursorPalette.resolveTintFromEnvironment()
 
     static func setCursorVariant(_ variant: String) {
@@ -144,10 +150,6 @@ enum SoftwareCursorGlyphRenderer {
 
     static var activeVariant: String {
         currentVariant
-    }
-
-    static var activeTint: NSColor? {
-        currentTint
     }
 
     static func draw(
