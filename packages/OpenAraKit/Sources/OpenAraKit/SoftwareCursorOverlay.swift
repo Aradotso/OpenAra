@@ -161,6 +161,14 @@ public func setOpenAraCursorVariant(_ variant: String) {
     SoftwareCursorGlyphRenderer.setCursorVariant(variant)
 }
 
+/// Apply a per-tab tint on top of the bundled cursor glyph. Pass `nil` to
+/// clear and fall back to the variant PNG's natural colour. Set once per
+/// MCP child at `initialize` from the `OPENARA_CURSOR_INDEX` env var.
+@MainActor
+public func setOpenAraCursorTint(_ tint: NSColor?) {
+    SoftwareCursorGlyphRenderer.setCursorTint(tint)
+}
+
 @MainActor
 public func signalOpenAraToolCallStart(targetApp: String?) {
     SoftwareCursorOverlay.signalToolCallStart(targetApp: targetApp)
