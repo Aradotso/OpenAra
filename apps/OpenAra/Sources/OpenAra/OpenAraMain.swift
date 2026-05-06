@@ -89,8 +89,16 @@ enum OpenAraMain {
         case .update:
             try runUpdate()
         case let .permissionTray(kind):
+            if hostOwnsPermissions() {
+                refusePermissionUI(command: "permission-tray")
+                return
+            }
             PermissionTrayApp.launch(kind: kind)
         case .launchOnboarding:
+            if hostOwnsPermissions() {
+                refusePermissionUI(command: "launch-onboarding")
+                return
+            }
             let permissions = PermissionDiagnostics.current()
             let forceOnboarding = ProcessInfo.processInfo.environment["OPENARA_FORCE_ONBOARDING"] == "1"
             if forceOnboarding || !permissions.allGranted {
@@ -122,6 +130,23 @@ enum OpenAraMain {
         OpenAraLogger.error(message, category: "cli")
     }
 
+    /// True when the host has set OPENARA_HOST_OWNS_PERMISSIONS=1 — meaning the
+    /// host (e.g. Ara Desktop) owns its own permission UI and OpenAra must not
+    /// pop any of its own GUI for permission flows. Pure tool-runner mode.
+    private static func hostOwnsPermissions() -> Bool {
+        ProcessInfo.processInfo.environment["OPENARA_HOST_OWNS_PERMISSIONS"] == "1"
+    }
+
+    /// Refuse a permission-UI request when running in host-owned mode. We log
+    /// to stderr (so MCP clients surface it) and exit cleanly so the host's
+    /// caller can move on without a popup window.
+    private static func refusePermissionUI(command: String) {
+        OpenAraLogger.warn(
+            "OpenAra is in host-owned permission mode (OPENARA_HOST_OWNS_PERMISSIONS=1) — refusing `\(command)`. The host application owns the permission UI.",
+            category: "cli"
+        )
+    }
+
     /// Called from the MCP entry point. If permissions are missing, log a
     /// stderr-friendly message (MCP clients surface stderr to the user) and
     /// spawn `openara launch-onboarding` as a detached child so the GUI
@@ -136,7 +161,10 @@ enum OpenAraMain {
     /// Hosts that embed OpenAra (e.g. Ara Desktop) own their own permission
     /// UI and don't want a parallel "Enable OpenAra" window competing with it.
     private static func surfaceOnboardingIfPermissionsMissing() {
-        if ProcessInfo.processInfo.environment["OPENARA_SUPPRESS_AUTO_ONBOARDING"] == "1" {
+        // OPENARA_HOST_OWNS_PERMISSIONS is the canonical flag; OPENARA_SUPPRESS_AUTO_ONBOARDING
+        // is kept as a transitional alias so older host code still suppresses correctly.
+        if hostOwnsPermissions() ||
+            ProcessInfo.processInfo.environment["OPENARA_SUPPRESS_AUTO_ONBOARDING"] == "1" {
             return
         }
 
