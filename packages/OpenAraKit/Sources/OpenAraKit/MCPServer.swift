@@ -74,10 +74,19 @@ public final class StdioMCPServer {
                     pid: pid,
                     envOverride: envOverride
                 )
+                // OPENARA_CURSOR_INDEX is set by acp-bridge when it spawns
+                // this MCP child for a specific tab — when present it pins
+                // the cursor tint to that tab's colour-index for the whole
+                // life of this MCP session, so a click/drag visibly
+                // belongs to the tab that initiated it. When absent we
+                // fall through to the legacy random-variant behaviour.
+                let tabTint = OpenAraCursorPalette.resolveTintFromEnvironment()
                 VisualCursorSupport.performOnMain {
                     setOpenAraCursorVariant(variant)
+                    setOpenAraCursorTint(tabTint)
                 }
-                OpenAraLogger.info("\(logPrefix) initialize cursor_variant=\(variant)", category: "mcp")
+                let tintLabel = tabTint == nil ? "none" : (ProcessInfo.processInfo.environment[OpenAraCursorPalette.envIndexKey] ?? "?")
+                OpenAraLogger.info("\(logPrefix) initialize cursor_variant=\(variant) tab_tint_index=\(tintLabel)", category: "mcp")
                 return try encodeJSONRPCResult(
                     id: id,
                     result: [

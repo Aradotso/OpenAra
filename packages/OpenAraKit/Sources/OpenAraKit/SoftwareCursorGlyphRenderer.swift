@@ -78,11 +78,57 @@ public enum OpenAraCursorVariant {
     }
 }
 
+/// Per-tab tint applied on top of the bundled cursor glyph. The 10 entries
+/// here mirror `FloatingChatTab.palette` in the AraDesktop app one-to-one
+/// — when a tab spawns a computer-use tool call, the openara MCP child is
+/// launched with `OPENARA_CURSOR_INDEX=<idx>` in its env, the renderer
+/// looks up `colors[idx]`, and the cursor body is recoloured to match
+/// the tab's border. **Keep these RGB values in lockstep with
+/// `FloatingChatTab.palette` in
+/// `AraDesktop/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift`.**
+public enum OpenAraCursorPalette {
+    public static let envIndexKey = "OPENARA_CURSOR_INDEX"
+
+    public static let colors: [NSColor] = [
+        NSColor(calibratedRed: 0.20, green: 0.55, blue: 0.95, alpha: 1.0),  // 0 blue
+        NSColor(calibratedRed: 0.95, green: 0.50, blue: 0.20, alpha: 1.0),  // 1 orange
+        NSColor(calibratedRed: 0.40, green: 0.75, blue: 0.40, alpha: 1.0),  // 2 green
+        NSColor(calibratedRed: 0.85, green: 0.35, blue: 0.65, alpha: 1.0),  // 3 pink
+        NSColor(calibratedRed: 0.60, green: 0.40, blue: 0.85, alpha: 1.0),  // 4 purple
+        NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.20, alpha: 1.0),  // 5 amber
+        NSColor(calibratedRed: 0.20, green: 0.70, blue: 0.70, alpha: 1.0),  // 6 teal
+        NSColor(calibratedRed: 0.90, green: 0.30, blue: 0.30, alpha: 1.0),  // 7 red
+        NSColor(calibratedRed: 0.30, green: 0.40, blue: 0.85, alpha: 1.0),  // 8 indigo
+        NSColor(calibratedRed: 0.85, green: 0.25, blue: 0.85, alpha: 1.0),  // 9 magenta
+    ]
+
+    /// Pull the tab colour-index from the process env (set by acp-bridge
+    /// when it spawns the openara MCP child for a given tab/session).
+    /// Returns `nil` when unset, malformed, or out of range — caller falls
+    /// back to the legacy variant-PNG path so old plumbing keeps working.
+    public static func resolveTintFromEnvironment() -> NSColor? {
+        guard let raw = ProcessInfo.processInfo.environment[envIndexKey],
+              let idx = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+              colors.indices.contains(idx)
+        else {
+            return nil
+        }
+        return colors[idx]
+    }
+}
+
 @MainActor
 enum SoftwareCursorGlyphRenderer {
     private static var openAraGlyph: NSImage? = loadOpenAraCursorGlyphImage(variant: currentVariant)
     private static let referenceImage = loadReferenceCursorWindowImage()
     private static var currentVariant: String = OpenAraCursorVariant.resolve(client: nil, pid: getpid())
+
+    /// Tab-derived tint applied on top of whichever glyph (PNG or
+    /// procedural fallback) is being drawn. `nil` = no tint, glyph
+    /// renders in its natural colours. Set at MCP `initialize` from
+    /// `OPENARA_CURSOR_INDEX` and never changes afterwards (each MCP
+    /// child belongs to exactly one tab for its whole lifetime).
+    private static var currentTint: NSColor? = OpenAraCursorPalette.resolveTintFromEnvironment()
 
     static func setCursorVariant(_ variant: String) {
         guard variant != currentVariant else { return }
@@ -90,8 +136,18 @@ enum SoftwareCursorGlyphRenderer {
         openAraGlyph = loadOpenAraCursorGlyphImage(variant: variant)
     }
 
+    /// Override the per-tab tint. Pass `nil` to clear and fall back to
+    /// the variant PNG's natural colour.
+    static func setCursorTint(_ tint: NSColor?) {
+        currentTint = tint
+    }
+
     static var activeVariant: String {
         currentVariant
+    }
+
+    static var activeTint: NSColor? {
+        currentTint
     }
 
     static func draw(
@@ -167,6 +223,21 @@ enum SoftwareCursorGlyphRenderer {
         context.scaleBy(x: scale, y: scale)
         context.translateBy(x: -bounds.midX, y: -bounds.midY)
         image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1)
+
+        // Tab-tint overlay: paint the tint over the just-drawn glyph using
+        // `.sourceAtop` so the colour clips to the glyph's alpha (no bleed
+        // outside the cursor silhouette). This replaces the variant PNG's
+        // hue wholesale — we lose the original colour's highlights, but the
+        // cursor reliably reads as the tab's colour, which is the whole
+        // point. Skipped when no tint is set so the original variant PNG
+        // renders untouched.
+        if let tint = currentTint {
+            NSGraphicsContext.saveGraphicsState()
+            tint.setFill()
+            bounds.fill(using: .sourceAtop)
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
         context.restoreGState()
     }
 
