@@ -67,6 +67,8 @@ public final class BoundSpaceManager: @unchecked Sendable {
     private let _setCurrentSpace: (@convention(c) (UInt32, CFString, UInt64) -> Void)?
     private let _getCurrentSpace: (@convention(c) (UInt32, CFString) -> UInt64)?
     private let _spaceForWindow: (@convention(c) (UInt32, UInt32) -> UInt64)?
+    private let _addWindowsToSpaces: (@convention(c) (UInt32, CFArray, CFArray) -> Void)?
+    private let _removeWindowsFromSpaces: (@convention(c) (UInt32, CFArray, CFArray) -> Void)?
 
     private init() {
         let raw = ProcessInfo.processInfo.environment["OPENARA_BOUND_SPACE_ID"] ?? ""
@@ -81,6 +83,8 @@ public final class BoundSpaceManager: @unchecked Sendable {
             self._setCurrentSpace = nil
             self._getCurrentSpace = nil
             self._spaceForWindow = nil
+            self._addWindowsToSpaces = nil
+            self._removeWindowsFromSpaces = nil
             BoundSpaceTrace.emit("BoundSpaceManager.init dlopen-failed envRaw=\(raw)")
             return
         }
@@ -95,6 +99,8 @@ public final class BoundSpaceManager: @unchecked Sendable {
         self._setCurrentSpace = sym("SLSManagedDisplaySetCurrentSpace", as: (@convention(c) (UInt32, CFString, UInt64) -> Void).self)
         self._getCurrentSpace = sym("SLSManagedDisplayGetCurrentSpace", as: (@convention(c) (UInt32, CFString) -> UInt64).self)
         self._spaceForWindow = sym("SLSGetSpaceForWindow", as: (@convention(c) (UInt32, UInt32) -> UInt64).self)
+        self._addWindowsToSpaces = sym("SLSAddWindowsToSpaces", as: (@convention(c) (UInt32, CFArray, CFArray) -> Void).self)
+        self._removeWindowsFromSpaces = sym("SLSRemoveWindowsFromSpaces", as: (@convention(c) (UInt32, CFArray, CFArray) -> Void).self)
 
         let active = (self.boundSpaceId != nil && self._setCurrentSpace != nil)
         BoundSpaceTrace.emit(
@@ -199,6 +205,91 @@ public final class BoundSpaceManager: @unchecked Sendable {
             }
         }
         return Array(seen)
+    }
+
+    /// Outcome of attempting to move every on-screen window owned by
+    /// `pid` from its current space membership to `target`. The
+    /// `relocate` operation is best-effort: on hardened SIP, the
+    /// `SLSAddWindowsToSpaces` / `SLSRemoveWindowsFromSpaces` calls
+    /// against windows owned by another connection silently no-op
+    /// (`connection_holds_rights_on_window` gates the actual move).
+    /// Callers use the post-move read to decide whether to fall back
+    /// to relaunch.
+    public struct RelocateResult: Sendable {
+        public let attempted: [UInt32]
+        public let landed: [UInt32]   // windows whose post-move space == target
+        public let stuck: [UInt32]    // windows still on their original space
+        public var allLanded: Bool { stuck.isEmpty && !landed.isEmpty }
+    }
+
+    /// Best-effort move of every on-screen window owned by `pid` to
+    /// CGSSpaceID `target`. Used by `AppDiscovery.reconcileSpaceMembership`
+    /// when the agent says "open Calculator" but Calculator is already
+    /// running with its window on the user's desktop.
+    ///
+    /// Mechanism — same as `SpaceManager.pin` on the host side, but we
+    /// don't own the windows here so it's a one-shot best-effort:
+    ///   1. Enumerate windows via `CGWindowListCopyWindowInfo`.
+    ///   2. For each window not already on `target`:
+    ///      - `SLSAddWindowsToSpaces(target)`
+    ///      - `SLSRemoveWindowsFromSpaces(<every other space the window
+    ///        was on>)`
+    ///   3. Re-read each window's space via `SLSGetSpaceForWindow` and
+    ///      classify as `landed` (now on target) or `stuck` (no-op).
+    ///
+    /// On modern macOS with full SIP this often returns `stuck` for
+    /// other-app windows. Callers that need stronger isolation should
+    /// follow up with `NSRunningApplication.terminate()` + a fresh
+    /// launch under `withBoundSpace`. See `AppRelaunchPolicy` in
+    /// `AppDiscovery.swift` for the safety gate.
+    public func relocateWindows(of pid: pid_t, to target: UInt64) -> RelocateResult {
+        guard let add = _addWindowsToSpaces,
+              let remove = _removeWindowsFromSpaces,
+              let spaceFor = _spaceForWindow
+        else {
+            BoundSpaceTrace.emit("relocateWindows.skip pid=\(pid) target=\(target) reason=symbols-missing")
+            return RelocateResult(attempted: [], landed: [], stuck: [])
+        }
+
+        let opts: CGWindowListOption = [.optionAll, .excludeDesktopElements]
+        guard let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else {
+            BoundSpaceTrace.emit("relocateWindows.skip pid=\(pid) target=\(target) reason=window-list-empty")
+            return RelocateResult(attempted: [], landed: [], stuck: [])
+        }
+
+        var attempted: [UInt32] = []
+        var landed: [UInt32] = []
+        var stuck: [UInt32] = []
+
+        for entry in info {
+            guard let ownerNum = entry[kCGWindowOwnerPID as String] as? NSNumber,
+                  ownerNum.int32Value == pid,
+                  let widNum = entry[kCGWindowNumber as String] as? NSNumber
+            else { continue }
+
+            let wid = widNum.uint32Value
+            let originalSpace = spaceFor(cid, wid)
+            if originalSpace == target { continue }   // already correct
+
+            attempted.append(wid)
+            add(cid, [wid] as CFArray, [target] as CFArray)
+            if originalSpace != 0 {
+                remove(cid, [wid] as CFArray, [originalSpace] as CFArray)
+            }
+
+            let postMove = spaceFor(cid, wid)
+            if postMove == target {
+                landed.append(wid)
+            } else {
+                stuck.append(wid)
+            }
+        }
+
+        BoundSpaceTrace.emit(
+            "relocateWindows pid=\(pid) target=\(target) " +
+            "attempted=\(attempted.count) landed=\(landed.count) stuck=\(stuck.count)"
+        )
+        return RelocateResult(attempted: attempted, landed: landed, stuck: stuck)
     }
 
     /// Same as `spaceIdsForApp` but keyed by pid.
