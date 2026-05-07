@@ -81,12 +81,15 @@ public final class StdioMCPServer {
                 // belongs to the tab that initiated it. When absent we
                 // fall through to the legacy random-variant behaviour.
                 let tabTint = OpenAraCursorPalette.resolveTintFromEnvironment()
+                let styleID = ProcessInfo.processInfo.environment["OPENARA_CURSOR_STYLE"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? OpenAraCursorStyle.defaultID
                 VisualCursorSupport.performOnMain {
+                    setOpenAraCursorStyle(styleID)
                     setOpenAraCursorVariant(variant)
                     setOpenAraCursorTint(tabTint)
                 }
                 let tintLabel = tabTint == nil ? "none" : (ProcessInfo.processInfo.environment[OpenAraCursorPalette.envIndexKey] ?? "?")
-                OpenAraLogger.info("\(logPrefix) initialize cursor_variant=\(variant) tab_tint_index=\(tintLabel)", category: "mcp")
+                OpenAraLogger.info("\(logPrefix) initialize cursor_variant=\(variant) tab_tint_index=\(tintLabel) cursor_style=\(styleID)", category: "mcp")
                 return try encodeJSONRPCResult(
                     id: id,
                     result: [

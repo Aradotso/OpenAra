@@ -302,19 +302,96 @@ enum AppDiscovery {
     }
 
     private static func openApplication(at appURL: URL) throws {
-        let configuration = NSWorkspace.OpenConfiguration()
-        let semaphore = DispatchSemaphore(value: 0)
         let errorBox = LaunchErrorBox()
+        let isBoundActive = BoundSpaceManager.shared.isActive
+        let appName = appURL.lastPathComponent
+        let bundleId = Bundle(url: appURL)?.bundleIdentifier ?? "<unknown>"
+        let boundId = BoundSpaceManager.shared.boundSpaceId.map(String.init) ?? "nil"
 
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
-            errorBox.error = error
-            semaphore.signal()
+        BoundSpaceTrace.emit(
+            "openApplication.start app=\(appName) bundleId=\(bundleId) " +
+            "isBoundActive=\(isBoundActive) boundSpaceId=\(boundId)"
+        )
+
+        if isBoundActive {
+            // Per-thread Mission Control space (host opt-in via
+            // `OPENARA_BOUND_SPACE_ID`): wrap the launch in a silent
+            // SLS-switch dance so the new window lands on the
+            // host-specified desktop without the user's view
+            // changing. The whole NSWorkspace.openApplication call
+            // happens inside the Task so we can avoid capturing the
+            // non-Sendable NSWorkspace.OpenConfiguration into the
+            // outer Task closure.
+            let outerSema = DispatchSemaphore(value: 0)
+            Task {
+                await BoundSpaceManager.shared.withBoundSpace {
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.activates = false
+                    // Force a new instance whenever the app supports
+                    // it (Chrome, Safari, Finder, most editors). For
+                    // multi-instance apps the new window lands on the
+                    // bound space silently; the user's existing
+                    // windows stay where they are. For single-instance
+                    // apps like Calculator macOS silently ignores this
+                    // flag and returns the existing instance — the
+                    // host (Ara) handles those cases separately if it
+                    // wants stronger isolation.
+                    configuration.createsNewApplicationInstance = true
+                    let innerSema = DispatchSemaphore(value: 0)
+                    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
+                        errorBox.error = error
+                        if let pid = runningApp?.processIdentifier {
+                            BoundSpaceTrace.emit("openApplication.callback app=\(appName) pid=\(pid) error=\(error?.localizedDescription ?? "nil")")
+                        } else {
+                            BoundSpaceTrace.emit("openApplication.callback app=\(appName) pid=<none> error=\(error?.localizedDescription ?? "nil")")
+                        }
+                        innerSema.signal()
+                    }
+                    waitForSignal(innerSema)
+                }
+                outerSema.signal()
+            }
+            waitForSignal(outerSema)
+        } else {
+            // Vanilla path — preserved exactly as before for hosts
+            // that don't use the per-thread-spaces feature.
+            let configuration = NSWorkspace.OpenConfiguration()
+            let semaphore = DispatchSemaphore(value: 0)
+            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
+                errorBox.error = error
+                if let pid = runningApp?.processIdentifier {
+                    BoundSpaceTrace.emit("openApplication.callback (vanilla) app=\(appName) pid=\(pid) error=\(error?.localizedDescription ?? "nil")")
+                } else {
+                    BoundSpaceTrace.emit("openApplication.callback (vanilla) app=\(appName) pid=<none> error=\(error?.localizedDescription ?? "nil")")
+                }
+                semaphore.signal()
+            }
+            waitForSignal(semaphore)
         }
 
-        waitForSignal(semaphore)
-
         if let launchError = errorBox.error {
+            BoundSpaceTrace.emit("openApplication.error app=\(appName) error=\(launchError.localizedDescription)")
             throw launchError
+        }
+
+        // Best-effort verification: query SLS for where the launched
+        // app's window(s) ended up. Lets the operator confirm "did
+        // Calculator land on the Ara desktop or not" without manually
+        // swiping through Mission Control.
+        if let bid = Bundle(url: appURL)?.bundleIdentifier {
+            let observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+            let observedStr = observed.map(String.init).joined(separator: ",")
+            let bound = BoundSpaceManager.shared.boundSpaceId
+            let matched: Bool = bound.map { observed.contains($0) } ?? false
+            let parts = [
+                "openApplication.verify",
+                "app=\(appName)",
+                "bundleId=\(bid)",
+                "windowSpaces=\(observedStr)",
+                "boundSpaceId=\(boundId)",
+                "match=\(matched)",
+            ]
+            BoundSpaceTrace.emit(parts.joined(separator: " "))
         }
     }
 
