@@ -73,6 +73,16 @@ enum SoftwareCursorGlyphMetrics {
 public struct OpenAraCursorStyle: Sendable {
     public let id: String
     public let imageResourceName: String
+    /// Optional second PNG drawn on top of the tinted fill — black
+    /// outline pixels only, transparent everywhere else. Lets the
+    /// outline survive the per-tab tint without the alpha-mask
+    /// gymnastics needed for a single-pass `.multiply` pipeline:
+    ///   1. fill PNG + `.sourceAtop` tint → tinted silhouette
+    ///   2. outline PNG + `.sourceOver`   → black outline on top
+    /// Set to `nil` for styles that don't want a separate outline
+    /// (currently only `.soft`, which is rendered from the soft
+    /// pebble's natural multi-colour PNG).
+    public let outlineImageResourceName: String?
     public let windowSize: CGSize
     /// Tip anchor in window-coordinate pixels (origin top-left in source
     /// art; the renderer flips the y axis at draw time).
@@ -94,12 +104,14 @@ public struct OpenAraCursorStyle: Sendable {
     public init(
         id: String,
         imageResourceName: String,
+        outlineImageResourceName: String? = nil,
         windowSize: CGSize,
         tipAnchor: CGPoint,
         tintBlendMode: NSCompositingOperation = .sourceAtop
     ) {
         self.id = id
         self.imageResourceName = imageResourceName
+        self.outlineImageResourceName = outlineImageResourceName
         self.windowSize = windowSize
         self.tipAnchor = tipAnchor
         self.tintBlendMode = tintBlendMode
@@ -112,40 +124,39 @@ public struct OpenAraCursorStyle: Sendable {
         tipAnchor: SoftwareCursorGlyphMetrics.tipAnchor
     )
 
-    /// Win95-flavoured pixel arrow. Runtime PNG is a pure white
-    /// silhouette of the arrow; tab tint applied via `.sourceAtop`
-    /// fills it with the tab colour. (Earlier `.multiply` attempt
-    /// painted opaque tint over transparent areas — visible as a
-    /// coloured square trailing the cursor — so we use the
-    /// alpha-preserving sourceAtop path here.)
+    /// Win95-flavoured pixel arrow. Two-PNG render: a white-silhouette
+    /// fill PNG tinted with `.sourceAtop` to the tab colour, then a
+    /// black-outline PNG drawn on top with `.sourceOver`. Outline
+    /// stays black, interior fills with the tab colour, transparent
+    /// areas remain transparent.
     public static let retroPixel = OpenAraCursorStyle(
         id: "retro-pixel",
         imageResourceName: "openara-cursor-retro-256",
+        outlineImageResourceName: "openara-cursor-retro-outline-256",
         windowSize: CGSize(width: 88, height: 88),
         tipAnchor: CGPoint(x: 33.69, y: 26.47)
     )
 
-    /// Classic slim mac-style mouse pointer. Runtime PNG is a smooth
-    /// anti-aliased white silhouette; tab tint applied via
-    /// `.sourceAtop` fills it cleanly. Tip at (29.91, 22.00) in the
-    /// 88-window.
+    /// Clean triangular pointer — three vertices, no awkward
+    /// connector geometry. Same fill+outline 2-PNG pipeline as retro.
+    /// Tip at (27.50, 22.00) in the 88-window.
     public static let sharp = OpenAraCursorStyle(
         id: "sharp",
         imageResourceName: "openara-cursor-sharp-256",
+        outlineImageResourceName: "openara-cursor-sharp-outline-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 29.91, y: 22.00)
+        tipAnchor: CGPoint(x: 27.50, y: 22.00)
     )
 
     /// Pixel-art pointing-hand cursor (the classic "hover-over-link"
-    /// pointer). Same white-silhouette + .sourceAtop tint pipeline as
-    /// retro and sharp. Tip is the fingertip — at canvas (70.20,
-    /// 58.00) in the 256-source, mapping to (24.13, 19.94) in the
-    /// 88-window.
+    /// pointer). Same fill+outline 2-PNG pipeline as retro and sharp.
+    /// Tip is the fingertip at (23.72, 19.94) in the 88-window.
     public static let pixelHand = OpenAraCursorStyle(
         id: "pixel-hand",
         imageResourceName: "openara-cursor-hand-256",
+        outlineImageResourceName: "openara-cursor-hand-outline-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 24.13, y: 19.94)
+        tipAnchor: CGPoint(x: 23.72, y: 19.94)
     )
 
     public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .sharp, .pixelHand]
@@ -266,6 +277,11 @@ enum SoftwareCursorGlyphRenderer {
         variant: currentVariant,
         styleResourceName: OpenAraActiveCursorStyle.imageResourceName
     )
+    /// Optional black-outline overlay drawn on top of the tinted fill.
+    /// `nil` for styles whose `outlineImageResourceName` is `nil`
+    /// (e.g. soft) — in that case we skip the second draw pass.
+    private static var outlineGlyph: NSImage? = OpenAraActiveCursorStyle.current.outlineImageResourceName
+        .flatMap { loadCursorPNG(named: $0) }
     private static let referenceImage = loadReferenceCursorWindowImage()
     private static var currentVariant: String = OpenAraCursorVariant.resolve(client: nil, pid: getpid())
 
@@ -302,6 +318,7 @@ enum SoftwareCursorGlyphRenderer {
             variant: currentVariant,
             styleResourceName: style.imageResourceName
         )
+        outlineGlyph = style.outlineImageResourceName.flatMap { loadCursorPNG(named: $0) }
     }
 
     /// Override the per-tab tint. Pass `nil` to clear and fall back to
@@ -388,16 +405,24 @@ enum SoftwareCursorGlyphRenderer {
         context.translateBy(x: -bounds.midX, y: -bounds.midY)
         image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1)
 
-        // Tab-tint overlay: blend mode is per-style. Soft uses
-        // `.sourceAtop` (replaces every opaque pixel with solid tint,
-        // safe to use against the per-variant coloured PNGs); retro
-        // uses `.multiply` so its black outline survives and only the
-        // white interior recolours. Skipped when no tint is set.
+        // Tab-tint overlay: paint the tint over the just-drawn fill
+        // glyph. `.sourceAtop` clips to the fill alpha so transparent
+        // areas remain transparent (avoids the opaque-square bug we
+        // hit when using `.multiply` against an opaque source fill).
         if let tint = currentTint {
             NSGraphicsContext.saveGraphicsState()
             tint.setFill()
             bounds.fill(using: OpenAraActiveCursorStyle.current.tintBlendMode)
             NSGraphicsContext.restoreGraphicsState()
+        }
+
+        // Outline overlay: when the active style ships a separate
+        // black-outline PNG, draw it on top with `.sourceOver` so the
+        // outline survives the tint pass. Without this, a tinted fill
+        // glyph reads as a flat colour blob; with it, the cursor has
+        // a recognisable black border + tinted interior.
+        if let outline = outlineGlyph {
+            outline.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1)
         }
 
         context.restoreGState()
@@ -569,6 +594,26 @@ enum SoftwareCursorGlyphRenderer {
         path.lineJoinStyle = .round
         return path
     }
+}
+
+/// Load a cursor PNG by bundle resource name, trying both the flat
+/// resources directory and the `cursors/` subdirectory. Returns `nil`
+/// when the file is missing — callers should fall through to a
+/// no-overlay path rather than crashing.
+func loadCursorPNG(named name: String) -> NSImage? {
+    if let url = OpenAraKitResources.url(forResource: name, withExtension: "png"),
+       let image = NSImage(contentsOf: url) {
+        return image
+    }
+    if let url = OpenAraKitResources.url(forResource: "cursors/\(name)", withExtension: "png"),
+       let image = NSImage(contentsOf: url) {
+        return image
+    }
+    if let url = Bundle.main.url(forResource: name, withExtension: "png"),
+       let image = NSImage(contentsOf: url) {
+        return image
+    }
+    return nil
 }
 
 func loadOpenAraCursorGlyphImage(
