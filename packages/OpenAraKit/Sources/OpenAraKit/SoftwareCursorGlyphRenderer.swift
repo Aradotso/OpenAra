@@ -149,7 +149,7 @@ public struct OpenAraCursorStyle: Sendable {
         imageResourceName: "openara-cursor-hand-256",
         outlineImageResourceName: "openara-cursor-hand-outline-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 29.56, y: 29.91)
+        tipAnchor: CGPoint(x: 29.56, y: 25.91)
     )
 
     public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .pixelHand]
