@@ -371,6 +371,20 @@ enum AppDiscovery {
                     // host (Ara) handles those cases separately if it
                     // wants stronger isolation.
                     configuration.createsNewApplicationInstance = true
+                    // Known-issue note: a brief visible-flash on the
+                    // user's space during cold launch was tracked but
+                    // not eliminated. Tried `configuration.hides=true`
+                    // (ignored by macOS Tahoe for fresh launches —
+                    // NSRunningApplication.unhide returns false) and
+                    // post-callback `app.hide()` (also returns false
+                    // because the app's NSApplication main loop
+                    // hasn't started yet at process-spawn time). The
+                    // window is correctly placed on the bound space
+                    // after the silent-flip restores; only the
+                    // ~100-300ms creation-frame is briefly visible to
+                    // the user. See PR description for details and
+                    // possible follow-ups (poll-for-isFinishedLaunching,
+                    // AX-level window pinning).
                     let innerSema = DispatchSemaphore(value: 0)
                     NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
                         errorBox.error = error
