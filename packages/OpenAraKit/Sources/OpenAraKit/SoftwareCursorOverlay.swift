@@ -161,6 +161,16 @@ public func setOpenAraCursorVariant(_ variant: String) {
     SoftwareCursorGlyphRenderer.setCursorVariant(variant)
 }
 
+/// Pick a cursor *shape* by id (e.g. "soft", "retro-pixel"). Set once
+/// per MCP child at `initialize` from the `OPENARA_CURSOR_STYLE` env
+/// var. Subsequent calls re-create the cursor panel so the new style's
+/// `windowSize` / `tipAnchor` take effect on the next move.
+@MainActor
+public func setOpenAraCursorStyle(_ id: String) {
+    SoftwareCursorGlyphRenderer.setCursorStyle(id)
+    SoftwareCursorOverlay.invalidatePanelGeometry()
+}
+
 /// Apply a per-tab tint on top of the bundled cursor glyph. Pass `nil` to
 /// clear and fall back to the variant PNG's natural colour. Set once per
 /// MCP child at `initialize` from the `OPENARA_CURSOR_INDEX` env var.
@@ -200,17 +210,24 @@ struct CursorWindowGeometry {
 
 private struct CursorArtwork {
     let geometry: CursorWindowGeometry
-    static let active = CursorArtwork(
-        geometry: CursorWindowGeometry(
-            windowSize: SoftwareCursorGlyphMetrics.windowSize,
-            tipAnchor: SoftwareCursorGlyphMetrics.tipAnchor
-        ),
-    )
+
+    /// Built from the *currently active* cursor style so a runtime
+    /// `setOpenAraCursorStyle` swap re-targets the click anchor and
+    /// panel size on the next move.
+    @MainActor
+    static var active: CursorArtwork {
+        CursorArtwork(
+            geometry: CursorWindowGeometry(
+                windowSize: OpenAraActiveCursorStyle.windowSize,
+                tipAnchor: OpenAraActiveCursorStyle.tipAnchor
+            )
+        )
+    }
 }
 
 @MainActor
 enum SoftwareCursorOverlay {
-    private static let artwork = CursorArtwork.active
+    private static var artwork: CursorArtwork { CursorArtwork.active }
     private static let renderBaseHeading = visualCursorRenderBaseHeading()
     private static let renderYAxisMultiplier = visualCursorRuntimeRenderYAxisMultiplier()
     private static var panel: CursorPanel?
@@ -306,6 +323,19 @@ enum SoftwareCursorOverlay {
         observationPhase = "hidden"
         writeObservationSnapshot(tipPosition: nil, rotation: nil)
         panel?.orderOut(nil)
+    }
+
+    /// Drop the cached `NSPanel` so the next move reconstructs it
+    /// against the *currently active* cursor style's `windowSize`.
+    /// Called by `setOpenAraCursorStyle` — without this, an in-flight
+    /// MCP child would keep using the old style's panel even after the
+    /// renderer swapped its glyph image.
+    static func invalidatePanelGeometry() {
+        panel?.orderOut(nil)
+        panel = nil
+        cursorView = nil
+        displayedTipPosition = nil
+        visualDynamicsState = nil
     }
 
     /// Ensure the overlay is visible and animate it toward a sensible
