@@ -616,12 +616,20 @@ func loadOpenAraCursorGlyphImage(
     // Style first: when a non-default style is active (e.g. retro pixel),
     // use ITS bundled PNG and ignore per-variant colour PNGs — the
     // tab-tint overlay (.sourceAtop) is doing the colouring anyway, so
-    // the style's white silhouette is enough.
-    let candidates = [
-        styleResourceName,
-        "openara-cursor-\(variant)-256",
-        "openara-cursor-256",
-    ]
+    // the style's white silhouette is enough. **But** for the default
+    // "soft" style `styleResourceName` is already `openara-cursor-256`
+    // (same file as the generic fallback) — keeping it as the first
+    // candidate would always short-circuit before the variant-coloured
+    // PNG, dropping per-tab colour when no tint env var is set. Skip
+    // the style entry when it duplicates the generic fallback so the
+    // variant ordering [variant → generic] survives for the soft path.
+    let genericFallback = "openara-cursor-256"
+    var candidates: [String] = []
+    if styleResourceName != genericFallback {
+        candidates.append(styleResourceName)
+    }
+    candidates.append("openara-cursor-\(variant)-256")
+    candidates.append(genericFallback)
 
     for name in candidates {
         if let url = OpenAraKitResources.url(forResource: name, withExtension: "png"),

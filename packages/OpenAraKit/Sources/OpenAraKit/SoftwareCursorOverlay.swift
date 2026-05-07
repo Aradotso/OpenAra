@@ -330,7 +330,13 @@ enum SoftwareCursorOverlay {
     /// Called by `setOpenAraCursorStyle` — without this, an in-flight
     /// MCP child would keep using the old style's panel even after the
     /// renderer swapped its glyph image.
+    ///
+    /// Tears down the idle 60fps redraw timer and any pending hide
+    /// before discarding the panel; otherwise a runtime style swap can
+    /// leave the timer firing against a nil panel forever.
     static func invalidatePanelGeometry() {
+        stopIdleAnimation()
+        cancelPendingHide()
         panel?.orderOut(nil)
         panel = nil
         cursorView = nil

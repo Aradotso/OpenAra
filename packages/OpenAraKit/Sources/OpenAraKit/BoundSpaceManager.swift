@@ -47,10 +47,21 @@ public final class BoundSpaceManager: @unchecked Sendable {
     /// process (matches the existing OPENARA_CURSOR_INDEX lifecycle).
     public let boundSpaceId: UInt64?
 
-    /// True iff every required private symbol resolved AND the host
-    /// opted in via the env var. Drives the fast no-op path for
-    /// hosts that don't use this feature.
-    public var isActive: Bool { boundSpaceId != nil && _setCurrentSpace != nil }
+    /// True iff every condition `withBoundSpace` actually checks at
+    /// runtime is satisfied: env-var opt-in, every SkyLight symbol
+    /// resolved, and the main display has a UUID. Callers (notably
+    /// `AppDiscovery.openApplication`) take a different branch when
+    /// this is true — setting `activates = false` and
+    /// `createsNewApplicationInstance = true` — so a "true" that
+    /// later gates inside `withBoundSpace` would launch the app as a
+    /// non-activated background instance with no space flip, which
+    /// is worse than the vanilla path. Keep the two checks aligned.
+    public var isActive: Bool {
+        boundSpaceId != nil
+            && _setCurrentSpace != nil
+            && _getCurrentSpace != nil
+            && mainDisplayUUID != nil
+    }
 
     private let cid: UInt32
     private let _setCurrentSpace: (@convention(c) (UInt32, CFString, UInt64) -> Void)?
@@ -172,10 +183,22 @@ public final class BoundSpaceManager: @unchecked Sendable {
     /// the app's pid, then look up each window's CGSSpaceID with the
     /// private `SLSGetSpaceForWindow`. Only `SLSGetSpaceForWindow` is
     /// private — the window list and pid match are public API.
+    ///
+    /// When the bundle has multiple running instances (Chrome with
+    /// multiple profiles, Finder + a relaunch instance during the
+    /// reused-instance fix path, etc.) we union the spaces across
+    /// every pid so the verifier doesn't false-negative on the new
+    /// instance because we picked the old one's pid.
     public func spaceIdsForApp(bundleIdentifier: String) -> [UInt64] {
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-        guard let app = running.first else { return [] }
-        return spaceIdsForPid(app.processIdentifier)
+        guard !running.isEmpty else { return [] }
+        var seen = Set<UInt64>()
+        for app in running {
+            for sid in spaceIdsForPid(app.processIdentifier) {
+                seen.insert(sid)
+            }
+        }
+        return Array(seen)
     }
 
     /// Same as `spaceIdsForApp` but keyed by pid.
