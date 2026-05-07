@@ -77,12 +77,32 @@ public struct OpenAraCursorStyle: Sendable {
     /// Tip anchor in window-coordinate pixels (origin top-left in source
     /// art; the renderer flips the y axis at draw time).
     public let tipAnchor: CGPoint
+    /// How the per-tab tint colour mixes with the bundled glyph PNG.
+    ///
+    /// - `.sourceAtop` (legacy / soft): paint the tint over the glyph
+    ///   so every opaque pixel becomes solid tint. Wipes the source
+    ///   PNG's own colours but is safe to use with the per-variant
+    ///   coloured PNGs (orange, blue, …) — `.multiply` against an
+    ///   already-coloured glyph mixes the two colours into mud.
+    /// - `.multiply` (retro / outline-preserving): keeps dark pixels
+    ///   dark, tints bright pixels. Use only when the PNG is a
+    ///   monochrome "black outline + white fill + transparent
+    ///   background" template; mixing it with coloured source art
+    ///   produces wrong results.
+    public let tintBlendMode: NSCompositingOperation
 
-    public init(id: String, imageResourceName: String, windowSize: CGSize, tipAnchor: CGPoint) {
+    public init(
+        id: String,
+        imageResourceName: String,
+        windowSize: CGSize,
+        tipAnchor: CGPoint,
+        tintBlendMode: NSCompositingOperation = .sourceAtop
+    ) {
         self.id = id
         self.imageResourceName = imageResourceName
         self.windowSize = windowSize
         self.tipAnchor = tipAnchor
+        self.tintBlendMode = tintBlendMode
     }
 
     public static let soft = OpenAraCursorStyle(
@@ -92,15 +112,18 @@ public struct OpenAraCursorStyle: Sendable {
         tipAnchor: SoftwareCursorGlyphMetrics.tipAnchor
     )
 
-    /// Win95-flavoured pixel arrow. Source PNG is padded so the cursor
-    /// occupies ~40% of the 256 canvas — visually similar in scale to
-    /// the soft glyph rather than filling the whole 88×88 window. Tip
-    /// at (33.74, 8.59) in the 88-window.
+    /// Win95-flavoured pixel arrow. Source PNG is centred and padded so
+    /// the cursor occupies ~40% of the 256 canvas — visually similar
+    /// in scale to the soft glyph rather than filling the window. The
+    /// PNG retains its black outline + white interior, and the
+    /// renderer uses `.multiply` blending so the outline survives the
+    /// tab tint while the interior fills with the tab colour.
     public static let retroPixel = OpenAraCursorStyle(
         id: "retro-pixel",
         imageResourceName: "openara-cursor-retro-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 33.74, y: 8.59)
+        tipAnchor: CGPoint(x: 33.74, y: 26.47),
+        tintBlendMode: .multiply
     )
 
     public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel]
@@ -343,17 +366,15 @@ enum SoftwareCursorGlyphRenderer {
         context.translateBy(x: -bounds.midX, y: -bounds.midY)
         image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1)
 
-        // Tab-tint overlay: paint the tint over the just-drawn glyph using
-        // `.sourceAtop` so the colour clips to the glyph's alpha (no bleed
-        // outside the cursor silhouette). This replaces the variant PNG's
-        // hue wholesale — we lose the original colour's highlights, but the
-        // cursor reliably reads as the tab's colour, which is the whole
-        // point. Skipped when no tint is set so the original variant PNG
-        // renders untouched.
+        // Tab-tint overlay: blend mode is per-style. Soft uses
+        // `.sourceAtop` (replaces every opaque pixel with solid tint,
+        // safe to use against the per-variant coloured PNGs); retro
+        // uses `.multiply` so its black outline survives and only the
+        // white interior recolours. Skipped when no tint is set.
         if let tint = currentTint {
             NSGraphicsContext.saveGraphicsState()
             tint.setFill()
-            bounds.fill(using: .sourceAtop)
+            bounds.fill(using: OpenAraActiveCursorStyle.current.tintBlendMode)
             NSGraphicsContext.restoreGraphicsState()
         }
 
