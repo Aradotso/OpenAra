@@ -304,6 +304,14 @@ enum AppDiscovery {
     private static func openApplication(at appURL: URL) throws {
         let errorBox = LaunchErrorBox()
         let isBoundActive = BoundSpaceManager.shared.isActive
+        let appName = appURL.lastPathComponent
+        let bundleId = Bundle(url: appURL)?.bundleIdentifier ?? "<unknown>"
+        let boundId = BoundSpaceManager.shared.boundSpaceId.map(String.init) ?? "nil"
+
+        BoundSpaceTrace.emit(
+            "openApplication.start app=\(appName) bundleId=\(bundleId) " +
+            "isBoundActive=\(isBoundActive) boundSpaceId=\(boundId)"
+        )
 
         if isBoundActive {
             // Per-thread Mission Control space (host opt-in via
@@ -330,8 +338,13 @@ enum AppDiscovery {
                     // wants stronger isolation.
                     configuration.createsNewApplicationInstance = true
                     let innerSema = DispatchSemaphore(value: 0)
-                    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+                    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
                         errorBox.error = error
+                        if let pid = runningApp?.processIdentifier {
+                            BoundSpaceTrace.emit("openApplication.callback app=\(appName) pid=\(pid) error=\(error?.localizedDescription ?? "nil")")
+                        } else {
+                            BoundSpaceTrace.emit("openApplication.callback app=\(appName) pid=<none> error=\(error?.localizedDescription ?? "nil")")
+                        }
                         innerSema.signal()
                     }
                     waitForSignal(innerSema)
@@ -344,15 +357,41 @@ enum AppDiscovery {
             // that don't use the per-thread-spaces feature.
             let configuration = NSWorkspace.OpenConfiguration()
             let semaphore = DispatchSemaphore(value: 0)
-            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
                 errorBox.error = error
+                if let pid = runningApp?.processIdentifier {
+                    BoundSpaceTrace.emit("openApplication.callback (vanilla) app=\(appName) pid=\(pid) error=\(error?.localizedDescription ?? "nil")")
+                } else {
+                    BoundSpaceTrace.emit("openApplication.callback (vanilla) app=\(appName) pid=<none> error=\(error?.localizedDescription ?? "nil")")
+                }
                 semaphore.signal()
             }
             waitForSignal(semaphore)
         }
 
         if let launchError = errorBox.error {
+            BoundSpaceTrace.emit("openApplication.error app=\(appName) error=\(launchError.localizedDescription)")
             throw launchError
+        }
+
+        // Best-effort verification: query SLS for where the launched
+        // app's window(s) ended up. Lets the operator confirm "did
+        // Calculator land on the Ara desktop or not" without manually
+        // swiping through Mission Control.
+        if let bid = Bundle(url: appURL)?.bundleIdentifier {
+            let observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+            let observedStr = observed.map(String.init).joined(separator: ",")
+            let bound = BoundSpaceManager.shared.boundSpaceId
+            let matched: Bool = bound.map { observed.contains($0) } ?? false
+            let parts = [
+                "openApplication.verify",
+                "app=\(appName)",
+                "bundleId=\(bid)",
+                "windowSpaces=\(observedStr)",
+                "boundSpaceId=\(boundId)",
+                "match=\(matched)",
+            ]
+            BoundSpaceTrace.emit(parts.joined(separator: " "))
         }
     }
 
