@@ -319,6 +319,16 @@ enum AppDiscovery {
                 await BoundSpaceManager.shared.withBoundSpace {
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = false
+                    // Force a new instance whenever the app supports
+                    // it (Chrome, Safari, Finder, most editors). For
+                    // multi-instance apps the new window lands on the
+                    // bound space silently; the user's existing
+                    // windows stay where they are. For single-instance
+                    // apps like Calculator macOS silently ignores this
+                    // flag and returns the existing instance — the
+                    // host (Ara) handles those cases separately if it
+                    // wants stronger isolation.
+                    configuration.createsNewApplicationInstance = true
                     let innerSema = DispatchSemaphore(value: 0)
                     NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
                         errorBox.error = error
