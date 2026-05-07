@@ -137,29 +137,18 @@ public struct OpenAraCursorStyle: Sendable {
         tipAnchor: CGPoint(x: 33.69, y: 26.47)
     )
 
-    /// Clean triangular pointer — three vertices, no awkward
-    /// connector geometry. Same fill+outline 2-PNG pipeline as retro.
-    /// Tip at (27.50, 22.00) in the 88-window.
-    public static let sharp = OpenAraCursorStyle(
-        id: "sharp",
-        imageResourceName: "openara-cursor-sharp-256",
-        outlineImageResourceName: "openara-cursor-sharp-outline-256",
-        windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 27.50, y: 22.00)
-    )
-
     /// Pixel-art pointing-hand cursor (the classic "hover-over-link"
-    /// pointer). Same fill+outline 2-PNG pipeline as retro and sharp.
-    /// Tip is the fingertip at (23.72, 19.94) in the 88-window.
+    /// pointer). Same fill+outline 2-PNG pipeline as retro. Tip is
+    /// the fingertip at (28.53, 25.44) in the 88-window.
     public static let pixelHand = OpenAraCursorStyle(
         id: "pixel-hand",
         imageResourceName: "openara-cursor-hand-256",
         outlineImageResourceName: "openara-cursor-hand-outline-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 23.72, y: 19.94)
+        tipAnchor: CGPoint(x: 28.53, y: 25.44)
     )
 
-    public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .sharp, .pixelHand]
+    public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .pixelHand]
     public static let defaultID: String = soft.id
 
     public static func style(forID id: String?) -> OpenAraCursorStyle {
