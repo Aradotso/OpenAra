@@ -43,6 +43,11 @@ enum SoftwareCursorGlyphMetrics {
     // (60.35, 70.3). Shrunk uniformly by ~30% so the cursor reads as a
     // companion glyph instead of a giant overlay blob, while preserving the
     // tip-to-target alignment.
+    //
+    // These remain the *defaults* (style="soft"). Per-style overrides live in
+    // `OpenAraCursorStyle`; downstream call sites should prefer
+    // `OpenAraCursorStyle.activeWindowSize` / `activeTipAnchor` so a future
+    // style swap re-targets the click point correctly.
     static let windowSize = CGSize(width: 88, height: 88)
     static let tipAnchor = CGPoint(x: 42.15, y: 49.10)
     static let referenceImageResourceName = "official-software-cursor-window-252"
@@ -52,6 +57,76 @@ enum SoftwareCursorGlyphMetrics {
     static let targetNeutralHeading = -(3 * CGFloat.pi / 4)
     static let proceduralContourNeutralHeading = -(96.5 * CGFloat.pi / 180)
     static let pointerArtworkRotation = -(targetNeutralHeading - proceduralContourNeutralHeading)
+}
+
+/// Curated cursor *shapes*. Orthogonal to `OpenAraCursorPalette` (which
+/// drives colour) — the shape is fixed for the lifetime of an MCP child
+/// (set once at `initialize` from `OPENARA_CURSOR_STYLE`), the colour
+/// can vary per tab.
+///
+/// Each style ships its own bundled PNG and a calibrated tip anchor —
+/// the click target is always the tip anchor, NOT the window centre, so
+/// adding a new style requires measuring where the visible tip falls in
+/// the bundled artwork. Use `tipRatio` to express the tip in
+/// canvas-relative coords (independent of the `windowSize` we draw
+/// into).
+public struct OpenAraCursorStyle: Sendable {
+    public let id: String
+    public let imageResourceName: String
+    public let windowSize: CGSize
+    /// Tip anchor in window-coordinate pixels (origin top-left in source
+    /// art; the renderer flips the y axis at draw time).
+    public let tipAnchor: CGPoint
+
+    public init(id: String, imageResourceName: String, windowSize: CGSize, tipAnchor: CGPoint) {
+        self.id = id
+        self.imageResourceName = imageResourceName
+        self.windowSize = windowSize
+        self.tipAnchor = tipAnchor
+    }
+
+    public static let soft = OpenAraCursorStyle(
+        id: "soft",
+        imageResourceName: "openara-cursor-256",
+        windowSize: SoftwareCursorGlyphMetrics.windowSize,
+        tipAnchor: SoftwareCursorGlyphMetrics.tipAnchor
+    )
+
+    /// Win95-flavoured pixel arrow. The visible tip sits at canvas
+    /// ratio (~0.21, 0.00) in the cropped 256-source PNG, which maps to
+    /// ~(18.7, 0) in the 88×88 cursor window. Tip at y=0 means the
+    /// halo/fog gradient (centred on bounds.midY) renders around the
+    /// arrow body rather than the tip — visually correct for an arrow
+    /// that points up-left.
+    public static let retroPixel = OpenAraCursorStyle(
+        id: "retro-pixel",
+        imageResourceName: "openara-cursor-retro-256",
+        windowSize: CGSize(width: 88, height: 88),
+        tipAnchor: CGPoint(x: 18.7, y: 0.0)
+    )
+
+    public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel]
+    public static let defaultID: String = soft.id
+
+    public static func style(forID id: String?) -> OpenAraCursorStyle {
+        guard let id else { return soft }
+        return all.first { $0.id == id } ?? soft
+    }
+}
+
+/// Per-process active cursor shape. Set once at MCP `initialize` from
+/// `OPENARA_CURSOR_STYLE`; read via the static accessors below by every
+/// renderer / overlay call site that previously hard-coded
+/// `SoftwareCursorGlyphMetrics.windowSize` / `.tipAnchor`.
+@MainActor
+enum OpenAraActiveCursorStyle {
+    static var current: OpenAraCursorStyle = OpenAraCursorStyle.style(
+        forID: ProcessInfo.processInfo.environment["OPENARA_CURSOR_STYLE"]
+    )
+
+    static var windowSize: CGSize { current.windowSize }
+    static var tipAnchor: CGPoint { current.tipAnchor }
+    static var imageResourceName: String { current.imageResourceName }
 }
 
 private enum SoftwareCursorGlyphColors {
@@ -144,7 +219,10 @@ public enum OpenAraCursorPalette {
 
 @MainActor
 enum SoftwareCursorGlyphRenderer {
-    private static var openAraGlyph: NSImage? = loadOpenAraCursorGlyphImage(variant: currentVariant)
+    private static var openAraGlyph: NSImage? = loadOpenAraCursorGlyphImage(
+        variant: currentVariant,
+        styleResourceName: OpenAraActiveCursorStyle.imageResourceName
+    )
     private static let referenceImage = loadReferenceCursorWindowImage()
     private static var currentVariant: String = OpenAraCursorVariant.resolve(client: nil, pid: getpid())
 
@@ -164,7 +242,23 @@ enum SoftwareCursorGlyphRenderer {
     static func setCursorVariant(_ variant: String) {
         guard variant != currentVariant else { return }
         currentVariant = variant
-        openAraGlyph = loadOpenAraCursorGlyphImage(variant: variant)
+        openAraGlyph = loadOpenAraCursorGlyphImage(
+            variant: variant,
+            styleResourceName: OpenAraActiveCursorStyle.imageResourceName
+        )
+    }
+
+    /// Swap the cursor *shape* (not colour). Curated styles only —
+    /// unknown ids fall through to "soft" so a stale env var can't
+    /// silently strand the agent without a cursor.
+    static func setCursorStyle(_ id: String) {
+        let style = OpenAraCursorStyle.style(forID: id)
+        guard style.id != OpenAraActiveCursorStyle.current.id else { return }
+        OpenAraActiveCursorStyle.current = style
+        openAraGlyph = loadOpenAraCursorGlyphImage(
+            variant: currentVariant,
+            styleResourceName: style.imageResourceName
+        )
     }
 
     /// Override the per-tab tint. Pass `nil` to clear and fall back to
@@ -436,8 +530,16 @@ enum SoftwareCursorGlyphRenderer {
     }
 }
 
-func loadOpenAraCursorGlyphImage(variant: String = "orange") -> NSImage? {
+func loadOpenAraCursorGlyphImage(
+    variant: String = "orange",
+    styleResourceName: String = "openara-cursor-256"
+) -> NSImage? {
+    // Style first: when a non-default style is active (e.g. retro pixel),
+    // use ITS bundled PNG and ignore per-variant colour PNGs — the
+    // tab-tint overlay (.sourceAtop) is doing the colouring anyway, so
+    // the style's white silhouette is enough.
     let candidates = [
+        styleResourceName,
         "openara-cursor-\(variant)-256",
         "openara-cursor-256",
     ]
