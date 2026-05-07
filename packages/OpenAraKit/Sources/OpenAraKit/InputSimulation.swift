@@ -49,7 +49,38 @@ enum InputSimulation {
             return
         }
 
-        // AX raise failed. The fallback (`runningApplication.activate`) yanks
+        // AX raise failed. Before reaching for the foreground-stealing
+        // `runningApplication.activate`, try the silent path: if the
+        // target's windows live on the bound Ara workspace AND
+        // PerPidFocus is enabled, post the yabai
+        // SLPSPostEventRecordTo pair to make the app key-focused
+        // without raising any window. The user's screen never moves
+        // and AppKit-gated input (text fields, table selection)
+        // accepts our subsequent events.
+        //
+        // Strictly gated: the window must live on the bound space
+        // (not the user's active space). Without this gate, focus-
+        // without-raise on a user-visible window still steals key
+        // focus from whatever they're typing into — same disruption,
+        // different mechanism.
+        if let target = BoundSpaceManager.shared.boundSpaceId,
+           BoundSpaceManager.shared.isActive,
+           PerPidFocus.shared.isAvailable
+        {
+            let pidSpaces = BoundSpaceManager.shared.spaceIdsForPid(app.pid)
+            if pidSpaces.contains(target) {
+                if PerPidFocus.shared.makeKeyWithoutRaising(pid: app.pid) {
+                    Thread.sleep(forTimeInterval: 0.12)
+                    return
+                }
+                // PerPidFocus tried and reported failure (symbol
+                // returned non-zero). Fall through to the focus-steal
+                // gate below — if the user opted in, we'll activate;
+                // otherwise we skip and the agent retries via AX.
+            }
+        }
+
+        // The fallback (`runningApplication.activate`) yanks
         // foreground focus away from whatever the user is doing, which breaks
         // the README promise that "you keep using your computer while the
         // agent works." Gate it behind an explicit opt-in so the default
