@@ -112,31 +112,28 @@ public struct OpenAraCursorStyle: Sendable {
         tipAnchor: SoftwareCursorGlyphMetrics.tipAnchor
     )
 
-    /// Win95-flavoured pixel arrow. Source PNG is centred and padded so
-    /// the cursor occupies ~40% of the 256 canvas — visually similar
-    /// in scale to the soft glyph rather than filling the window. The
-    /// PNG retains its black outline + white interior, and the
-    /// renderer uses `.multiply` blending so the outline survives the
-    /// tab tint while the interior fills with the tab colour.
+    /// Win95-flavoured pixel arrow. Runtime PNG is a pure white
+    /// silhouette of the arrow; tab tint applied via `.sourceAtop`
+    /// fills it with the tab colour. (Earlier `.multiply` attempt
+    /// painted opaque tint over transparent areas — visible as a
+    /// coloured square trailing the cursor — so we use the
+    /// alpha-preserving sourceAtop path here.)
     public static let retroPixel = OpenAraCursorStyle(
         id: "retro-pixel",
         imageResourceName: "openara-cursor-retro-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 33.74, y: 26.47),
-        tintBlendMode: .multiply
+        tipAnchor: CGPoint(x: 33.69, y: 26.47)
     )
 
-    /// Classic slim mac-style mouse pointer — black outline + white
-    /// interior, rendered at high resolution and downscaled with
-    /// LANCZOS so the edges stay smooth (no chunky polygon look).
-    /// Interior tints with the tab colour via `.multiply`. Tip at
-    /// (30.59, 22.00) in the 88-window.
+    /// Classic slim mac-style mouse pointer. Runtime PNG is a smooth
+    /// anti-aliased white silhouette; tab tint applied via
+    /// `.sourceAtop` fills it cleanly. Tip at (29.91, 22.00) in the
+    /// 88-window.
     public static let sharp = OpenAraCursorStyle(
         id: "sharp",
         imageResourceName: "openara-cursor-sharp-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 30.59, y: 22.00),
-        tintBlendMode: .multiply
+        tipAnchor: CGPoint(x: 29.91, y: 22.00)
     )
 
     public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .sharp]
