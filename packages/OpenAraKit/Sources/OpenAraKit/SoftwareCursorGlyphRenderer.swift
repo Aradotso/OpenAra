@@ -126,15 +126,16 @@ public struct OpenAraCursorStyle: Sendable {
         tintBlendMode: .multiply
     )
 
-    /// Classic slim mouse pointer — black outline + white interior,
-    /// designed to read at small sizes. Interior tints with the tab
-    /// colour via `.multiply` (same as retro). Tip at (35.41, 30.25)
-    /// in the 88-window.
+    /// Classic slim mac-style mouse pointer — black outline + white
+    /// interior, rendered at high resolution and downscaled with
+    /// LANCZOS so the edges stay smooth (no chunky polygon look).
+    /// Interior tints with the tab colour via `.multiply`. Tip at
+    /// (30.59, 22.00) in the 88-window.
     public static let sharp = OpenAraCursorStyle(
         id: "sharp",
         imageResourceName: "openara-cursor-sharp-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 35.41, y: 30.25),
+        tipAnchor: CGPoint(x: 30.59, y: 22.00),
         tintBlendMode: .multiply
     )
 
