@@ -302,16 +302,44 @@ enum AppDiscovery {
     }
 
     private static func openApplication(at appURL: URL) throws {
-        let configuration = NSWorkspace.OpenConfiguration()
-        let semaphore = DispatchSemaphore(value: 0)
         let errorBox = LaunchErrorBox()
+        let isBoundActive = BoundSpaceManager.shared.isActive
 
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
-            errorBox.error = error
-            semaphore.signal()
+        if isBoundActive {
+            // Per-thread Mission Control space (host opt-in via
+            // `OPENARA_BOUND_SPACE_ID`): wrap the launch in a silent
+            // SLS-switch dance so the new window lands on the
+            // host-specified desktop without the user's view
+            // changing. The whole NSWorkspace.openApplication call
+            // happens inside the Task so we can avoid capturing the
+            // non-Sendable NSWorkspace.OpenConfiguration into the
+            // outer Task closure.
+            let outerSema = DispatchSemaphore(value: 0)
+            Task {
+                await BoundSpaceManager.shared.withBoundSpace {
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.activates = false
+                    let innerSema = DispatchSemaphore(value: 0)
+                    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+                        errorBox.error = error
+                        innerSema.signal()
+                    }
+                    waitForSignal(innerSema)
+                }
+                outerSema.signal()
+            }
+            waitForSignal(outerSema)
+        } else {
+            // Vanilla path — preserved exactly as before for hosts
+            // that don't use the per-thread-spaces feature.
+            let configuration = NSWorkspace.OpenConfiguration()
+            let semaphore = DispatchSemaphore(value: 0)
+            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+                errorBox.error = error
+                semaphore.signal()
+            }
+            waitForSignal(semaphore)
         }
-
-        waitForSignal(semaphore)
 
         if let launchError = errorBox.error {
             throw launchError
