@@ -93,15 +93,14 @@ public struct OpenAraCursorStyle: Sendable {
     )
 
     /// Win95-flavoured pixel arrow. Source PNG is padded so the cursor
-    /// occupies ~55% of the 256 canvas — this keeps the on-screen
-    /// arrow visually proportionate to the soft glyph instead of
-    /// filling the whole 88×88 window. The tip lives at canvas ratio
-    /// (~0.34, ~0.07) which maps to (29.97, 6.53) in the 88-window.
+    /// occupies ~40% of the 256 canvas — visually similar in scale to
+    /// the soft glyph rather than filling the whole 88×88 window. Tip
+    /// at (33.74, 8.59) in the 88-window.
     public static let retroPixel = OpenAraCursorStyle(
         id: "retro-pixel",
         imageResourceName: "openara-cursor-retro-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 29.97, y: 6.53)
+        tipAnchor: CGPoint(x: 33.74, y: 8.59)
     )
 
     public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel]
