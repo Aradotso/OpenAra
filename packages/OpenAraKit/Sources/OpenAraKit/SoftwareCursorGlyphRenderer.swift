@@ -138,14 +138,18 @@ public struct OpenAraCursorStyle: Sendable {
     )
 
     /// Pixel-art pointing-hand cursor (the classic "hover-over-link"
-    /// pointer). Same fill+outline 2-PNG pipeline as retro. Tip is
-    /// the fingertip at (28.53, 25.44) in the 88-window.
+    /// pointer). Same fill+outline 2-PNG pipeline as retro. The
+    /// click target is at the visible fingertip — not the 1-2 px
+    /// apex sliver of the fingernail, but a few rows down where the
+    /// finger is clearly formed (canvas (86, 87) → window (29.56,
+    /// 29.91)) so what the user sees as "the fingertip" is what gets
+    /// clicked.
     public static let pixelHand = OpenAraCursorStyle(
         id: "pixel-hand",
         imageResourceName: "openara-cursor-hand-256",
         outlineImageResourceName: "openara-cursor-hand-outline-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 28.53, y: 25.44)
+        tipAnchor: CGPoint(x: 29.56, y: 29.91)
     )
 
     public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .pixelHand]
