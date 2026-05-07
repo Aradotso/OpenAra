@@ -412,8 +412,24 @@ enum AppDiscovery {
         // app's window(s) ended up. Lets the operator confirm "did
         // Calculator land on the Ara desktop or not" without manually
         // swiping through Mission Control.
+        //
+        // Poll-with-deadline pattern: live testing on Tahoe 26.4 found
+        // that Calculator's first-launch can take >1.5s for the window
+        // to register in `CGWindowListCopyWindowInfo`, even though the
+        // process is spawned and reported back via openApplication's
+        // callback at ~270ms. Without polling we'd consistently log
+        // `windowSpaces= match=false` for cold launches even though
+        // the window does appear (and on the correct space) shortly
+        // after — false alarm. Poll up to 4s, exit early on first
+        // non-empty list. Total cost is bounded; happy-path is fast.
         if let bid = Bundle(url: appURL)?.bundleIdentifier {
-            let observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+            var observed: [UInt64] = []
+            let verifyDeadline = Date().addingTimeInterval(4.0)
+            while Date() < verifyDeadline {
+                observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+                if !observed.isEmpty { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
             let observedStr = observed.map(String.init).joined(separator: ",")
             let bound = BoundSpaceManager.shared.boundSpaceId
             let matched: Bool = bound.map { observed.contains($0) } ?? false
