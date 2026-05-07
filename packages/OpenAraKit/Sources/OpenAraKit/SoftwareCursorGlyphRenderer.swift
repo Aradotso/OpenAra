@@ -136,7 +136,19 @@ public struct OpenAraCursorStyle: Sendable {
         tipAnchor: CGPoint(x: 29.91, y: 22.00)
     )
 
-    public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .sharp]
+    /// Pixel-art pointing-hand cursor (the classic "hover-over-link"
+    /// pointer). Same white-silhouette + .sourceAtop tint pipeline as
+    /// retro and sharp. Tip is the fingertip — at canvas (70.20,
+    /// 58.00) in the 256-source, mapping to (24.13, 19.94) in the
+    /// 88-window.
+    public static let pixelHand = OpenAraCursorStyle(
+        id: "pixel-hand",
+        imageResourceName: "openara-cursor-hand-256",
+        windowSize: CGSize(width: 88, height: 88),
+        tipAnchor: CGPoint(x: 24.13, y: 19.94)
+    )
+
+    public static let all: [OpenAraCursorStyle] = [.soft, .retroPixel, .sharp, .pixelHand]
     public static let defaultID: String = soft.id
 
     public static func style(forID id: String?) -> OpenAraCursorStyle {
