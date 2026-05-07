@@ -88,6 +88,10 @@ public enum OpenAraCursorVariant {
 /// `AraDesktop/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift`.**
 public enum OpenAraCursorPalette {
     public static let envIndexKey = "OPENARA_CURSOR_INDEX"
+    /// Explicit `#RRGGBB` tint set by the host (Ara Desktop's
+    /// `CursorPaletteCatalog`). When present this wins over `envIndexKey`,
+    /// which lets the host swap palettes without rebuilding OpenAra.
+    public static let envTintKey = "OPENARA_CURSOR_TINT"
 
     public static let colors: [NSColor] = [
         NSColor(calibratedRed: 0.20, green: 0.55, blue: 0.95, alpha: 1.0),  // 0 blue
@@ -102,18 +106,39 @@ public enum OpenAraCursorPalette {
         NSColor(calibratedRed: 0.85, green: 0.25, blue: 0.85, alpha: 1.0),  // 9 magenta
     ]
 
-    /// Pull the tab colour-index from the process env (set by acp-bridge
-    /// when it spawns the openara MCP child for a given tab/session).
-    /// Returns `nil` when unset, malformed, or out of range — caller falls
-    /// back to the legacy variant-PNG path so old plumbing keeps working.
+    /// Pull the tab tint from the process env (set by acp-bridge when it
+    /// spawns the openara MCP child for a given tab/session). Prefers the
+    /// explicit `OPENARA_CURSOR_TINT` (`#RRGGBB`, host-resolved from the
+    /// user's active palette) and falls back to the legacy
+    /// `OPENARA_CURSOR_INDEX` lookup against the hard-coded `colors`
+    /// table. Returns `nil` when both are unset / malformed — caller
+    /// falls through to the variant-PNG natural colour.
     public static func resolveTintFromEnvironment() -> NSColor? {
-        guard let raw = ProcessInfo.processInfo.environment[envIndexKey],
+        let env = ProcessInfo.processInfo.environment
+        if let raw = env[envTintKey], let color = parseHexColor(raw) {
+            return color
+        }
+        guard let raw = env[envIndexKey],
               let idx = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
               colors.indices.contains(idx)
         else {
             return nil
         }
         return colors[idx]
+    }
+
+    /// Parse `#RRGGBB` (case-insensitive, leading `#` optional) into a
+    /// device-RGB `NSColor`. Returns nil for any other shape so a
+    /// malformed env var falls through to the index path instead of
+    /// silently picking black.
+    static func parseHexColor(_ raw: String) -> NSColor? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let value = UInt32(s, radix: 16) else { return nil }
+        let r = CGFloat((value >> 16) & 0xFF) / 255.0
+        let g = CGFloat((value >> 8) & 0xFF) / 255.0
+        let b = CGFloat(value & 0xFF) / 255.0
+        return NSColor(calibratedRed: r, green: g, blue: b, alpha: 1.0)
     }
 }
 
