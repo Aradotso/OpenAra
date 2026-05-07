@@ -32,6 +32,10 @@ let package = Package(
             name: "StandaloneCursor",
             targets: ["StandaloneCursor"]
         ),
+        .executable(
+            name: "OpenAraCursorNarrator",
+            targets: ["OpenAraCursorNarrator"]
+        ),
     ],
     targets: [
         .target(
@@ -68,6 +72,11 @@ let package = Package(
             name: "StandaloneCursor",
             dependencies: ["StandaloneCursorSupport"],
             path: "experiments/StandaloneCursor/Sources/StandaloneCursor"
+        ),
+        .executableTarget(
+            name: "OpenAraCursorNarrator",
+            dependencies: ["OpenAraKit"],
+            path: "apps/OpenAraCursorNarrator/Sources/OpenAraCursorNarrator"
         ),
         .testTarget(
             name: "OpenAraKitTests",

@@ -6,6 +6,7 @@ final class MCPAppRuntime: NSObject, NSApplicationDelegate {
     private let server: StdioMCPServer
     private var runtimeError: Error?
     private var turnEndedObserver: NSObjectProtocol?
+    private var remoteCursorObservers: [NSObjectProtocol] = []
 
     private init(server: StdioMCPServer) {
         self.server = server
@@ -36,12 +37,29 @@ final class MCPAppRuntime: NSObject, NSApplicationDelegate {
                 resetOpenAraVisualCursor()
             }
         }
+
+        // Remote-cursor channel: when the host (Ara Desktop's acp-bridge) sets
+        // OPENARA_REMOTE_CURSOR=1, register a second set of observers that let
+        // any external mechanism — primarily the Playwright/CDP browser path —
+        // animate this overlay to a screen point and pulse a click. The cursor
+        // becomes a single coherent narrator for every agent action regardless
+        // of which mechanism fired underneath.
+        if openAraRemoteCursorEnabled() {
+            MainActor.assumeIsolated {
+                remoteCursorObservers = startOpenAraRemoteCursorChannel(pid: getpid())
+            }
+        }
+
         Thread.detachNewThreadSelector(#selector(processStandardIO), toTarget: self, with: nil)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let turnEndedObserver {
             DistributedNotificationCenter.default().removeObserver(turnEndedObserver)
+        }
+        if !remoteCursorObservers.isEmpty {
+            stopOpenAraRemoteCursorChannel(remoteCursorObservers)
+            remoteCursorObservers.removeAll()
         }
     }
 
