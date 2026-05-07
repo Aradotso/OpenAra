@@ -134,7 +134,7 @@ public struct OpenAraCursorStyle: Sendable {
         imageResourceName: "openara-cursor-retro-256",
         outlineImageResourceName: "openara-cursor-retro-outline-256",
         windowSize: CGSize(width: 88, height: 88),
-        tipAnchor: CGPoint(x: 33.69, y: 26.47)
+        tipAnchor: CGPoint(x: 33.69, y: 60.47)
     )
 
     /// Pixel-art pointing-hand cursor (the classic "hover-over-link"
