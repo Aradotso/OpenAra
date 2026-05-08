@@ -356,63 +356,39 @@ enum AppDiscovery {
             // happens inside the Task so we can avoid capturing the
             // non-Sendable NSWorkspace.OpenConfiguration into the
             // outer Task closure.
-
-            // Pre-launch state capture for the reverse-flip + the
-            // already-running detection. Both checks need to happen
-            // BEFORE we start the silent-flip — once the flip is in
-            // progress these reads return the wrong answer.
-            let prevSpace = BoundSpaceManager.shared.currentSpace() ?? 0
-            let prevFrontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
-            let preLaunchPids: Set<pid_t> = {
-                guard let bid = Bundle(url: appURL)?.bundleIdentifier else { return [] }
-                return Set(
-                    NSRunningApplication
-                        .runningApplications(withBundleIdentifier: bid)
-                        .map { $0.processIdentifier }
-                )
-            }()
-
-            // Arm the reverse-flip BEFORE launching so the observer
-            // is registered before the launched app has a chance to
-            // call NSApp.activate() and drag the user's view along.
-            // The scheduler is a one-shot — it auto-removes after
-            // first match or 3s deadline.
-            if let bid = Bundle(url: appURL)?.bundleIdentifier, prevSpace != 0 {
-                ReverseFlipScheduler.shared.schedule(
-                    launchedBundleId: bid,
-                    prevSpace: prevSpace,
-                    prevFrontPid: prevFrontPid
-                )
-            }
-
             let outerSema = DispatchSemaphore(value: 0)
-            let callbackPidBox = LaunchPidBox()
             Task {
                 await BoundSpaceManager.shared.withBoundSpace {
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = false
                     // Force a new instance whenever the app supports
-                    // it (Chrome, most editors). For single-instance
-                    // apps (Calculator, Finder, Mail, Notes) macOS
-                    // silently ignores this flag — those cases are
-                    // handled by `AppNewWindowForcer` below, which
-                    // runs INSIDE this withBoundSpace closure so any
-                    // newly-created window is born during the
-                    // flipped-bookkeeping window.
+                    // it (Chrome, Safari, Finder, most editors). For
+                    // multi-instance apps the new window lands on the
+                    // bound space silently; the user's existing
+                    // windows stay where they are. For single-instance
+                    // apps like Calculator macOS silently ignores this
+                    // flag and returns the existing instance — the
+                    // host (Ara) handles those cases separately if it
+                    // wants stronger isolation.
                     configuration.createsNewApplicationInstance = true
                     // Known-issue note: a brief visible-flash on the
                     // user's space during cold launch was tracked but
                     // not eliminated. Tried `configuration.hides=true`
-                    // (ignored by macOS Tahoe for fresh launches) and
-                    // post-callback `app.hide()` (also fails because
-                    // NSApplication main loop hasn't started yet).
-                    // The reverse-flip handles the symptom (user view
-                    // bouncing back) regardless of placement.
+                    // (ignored by macOS Tahoe for fresh launches —
+                    // NSRunningApplication.unhide returns false) and
+                    // post-callback `app.hide()` (also returns false
+                    // because the app's NSApplication main loop
+                    // hasn't started yet at process-spawn time). The
+                    // window is correctly placed on the bound space
+                    // after the silent-flip restores; only the
+                    // ~100-300ms creation-frame is briefly visible to
+                    // the user. See PR description for details and
+                    // possible follow-ups (poll-for-isFinishedLaunching,
+                    // AX-level window pinning).
                     let innerSema = DispatchSemaphore(value: 0)
                     NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
                         errorBox.error = error
                         if let pid = runningApp?.processIdentifier {
-                            callbackPidBox.pid = pid
                             BoundSpaceTrace.emit("openApplication.callback app=\(appName) pid=\(pid) error=\(error?.localizedDescription ?? "nil")")
                         } else {
                             BoundSpaceTrace.emit("openApplication.callback app=\(appName) pid=<none> error=\(error?.localizedDescription ?? "nil")")
@@ -420,31 +396,6 @@ enum AppDiscovery {
                         innerSema.signal()
                     }
                     waitForSignal(innerSema)
-
-                    // Already-running detection. If the launched pid
-                    // was already in our pre-launch snapshot, macOS
-                    // reused the existing instance — no new window
-                    // was born. Force one explicitly while we're
-                    // still inside the flipped bookkeeping so the
-                    // new window lands on the bound space.
-                    if let pid = callbackPidBox.pid,
-                       let bid = Bundle(url: appURL)?.bundleIdentifier,
-                       AppNewWindowForcer.wasReused(
-                           callbackPid: pid,
-                           preLaunchPids: preLaunchPids
-                       )
-                    {
-                        BoundSpaceTrace.emit(
-                            "openApplication.reused-instance " +
-                            "bundleId=\(bid) pid=\(pid) — forcing new window"
-                        )
-                        AppNewWindowForcer.force(bundleId: bid, pid: pid)
-                        // Brief settle so AppleScript's `make new …`
-                        // commits the new window into WindowServer
-                        // before withBoundSpace's outer settle starts
-                        // its own restore countdown.
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                    }
                 }
                 outerSema.signal()
             }
@@ -623,14 +574,6 @@ enum AppDiscovery {
 
     private final class LaunchErrorBox: @unchecked Sendable {
         var error: Error?
-    }
-
-    /// Holds the launched app's pid so subsequent reused-instance
-    /// detection can read it from outside the launch completion
-    /// handler. Reference type so writes from the callback are
-    /// visible after the closure returns.
-    private final class LaunchPidBox: @unchecked Sendable {
-        var pid: pid_t?
     }
 
     private static func recentUsageCutoff(referenceDate: Date = Date()) -> Date {

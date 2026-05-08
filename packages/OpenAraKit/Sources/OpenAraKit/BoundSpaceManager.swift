@@ -106,12 +106,7 @@ public final class BoundSpaceManager: @unchecked Sendable {
         BoundSpaceTrace.emit(
             "BoundSpaceManager.init envRaw=\(raw) " +
             "boundSpaceId=\(self.boundSpaceId.map(String.init) ?? "nil") " +
-            "cid=\(self.cid) isActive=\(active) " +
-            "syms[setCurrent=\(self._setCurrentSpace != nil) " +
-            "getCurrent=\(self._getCurrentSpace != nil) " +
-            "spaceForWindow=\(self._spaceForWindow != nil) " +
-            "addToSpaces=\(self._addWindowsToSpaces != nil) " +
-            "removeFromSpaces=\(self._removeWindowsFromSpaces != nil)]"
+            "cid=\(self.cid) isActive=\(active)"
         )
     }
 
@@ -119,33 +114,6 @@ public final class BoundSpaceManager: @unchecked Sendable {
         let did = CGMainDisplayID()
         guard let cf = CGDisplayCreateUUIDFromDisplayID(did)?.takeRetainedValue() else { return nil }
         return CFUUIDCreateString(nil, cf)
-    }
-
-    /// Read the current bookkeeping space — used by callers that need
-    /// to capture pre-launch state so they can restore it after a
-    /// self-activating app has dragged the user's view along.
-    public func currentSpace() -> UInt64? {
-        guard isActive,
-              let getCurrent = _getCurrentSpace,
-              let uuid = mainDisplayUUID
-        else { return nil }
-        return getCurrent(cid, uuid)
-    }
-
-    /// Set the bookkeeping current space WITHOUT the launch-with-body
-    /// dance — the simple version of `withBoundSpace` for when callers
-    /// just need to nudge WindowServer back to a known-good state.
-    /// Used by `ReverseFlipScheduler` when an app self-activates and
-    /// drags the user's view along; we set bookkeeping back to the
-    /// user's previous space so their screen returns home.
-    @discardableResult
-    public func setCurrentSpace(_ spaceId: UInt64) -> Bool {
-        guard isActive,
-              let setCurrent = _setCurrentSpace,
-              let uuid = mainDisplayUUID
-        else { return false }
-        setCurrent(cid, uuid, spaceId)
-        return true
     }
 
     /// Run `body` with WindowServer's bookkeeping current-space
@@ -275,20 +243,11 @@ public final class BoundSpaceManager: @unchecked Sendable {
     /// launch under `withBoundSpace`. See `AppRelaunchPolicy` in
     /// `AppDiscovery.swift` for the safety gate.
     public func relocateWindows(of pid: pid_t, to target: UInt64) -> RelocateResult {
-        // Permissive degraded-mode: only `_addWindowsToSpaces` is
-        // strictly required to attempt the move. `_spaceForWindow`
-        // would let us skip already-correct windows and classify
-        // landed-vs-stuck post-move; if it's nil (Tahoe 26.4 hides
-        // it from non-WindowServer-privileged processes) we just
-        // attempt the add unconditionally and skip classification.
-        // `_removeWindowsFromSpaces` is best-effort: if available,
-        // we evict the window from non-target spaces; if not, the
-        // window may end up multi-space but at least the bound
-        // space gains it.
-        guard let add = _addWindowsToSpaces else {
-            BoundSpaceTrace.emit(
-                "relocateWindows.skip pid=\(pid) target=\(target) reason=add-symbol-missing"
-            )
+        guard let add = _addWindowsToSpaces,
+              let remove = _removeWindowsFromSpaces,
+              let spaceFor = _spaceForWindow
+        else {
+            BoundSpaceTrace.emit("relocateWindows.skip pid=\(pid) target=\(target) reason=symbols-missing")
             return RelocateResult(attempted: [], landed: [], stuck: [])
         }
 
@@ -309,38 +268,26 @@ public final class BoundSpaceManager: @unchecked Sendable {
             else { continue }
 
             let wid = widNum.uint32Value
-
-            // Pre-move classification (skipped when spaceFor is nil).
-            let originalSpace: UInt64? = _spaceForWindow.map { $0(cid, wid) }
-            if let s = originalSpace, s == target { continue }   // already correct
+            let originalSpace = spaceFor(cid, wid)
+            if originalSpace == target { continue }   // already correct
 
             attempted.append(wid)
             add(cid, [wid] as CFArray, [target] as CFArray)
-            if let remove = _removeWindowsFromSpaces, let s = originalSpace, s != 0 {
-                remove(cid, [wid] as CFArray, [s] as CFArray)
+            if originalSpace != 0 {
+                remove(cid, [wid] as CFArray, [originalSpace] as CFArray)
             }
 
-            // Post-move classification. Without spaceFor we can't
-            // tell, so we record as "attempted" and trust SkyLight
-            // honored our request — the trace will tell us if
-            // subsequent enforce-bound-space passes still find the
-            // same windows off-target (would mean SIP gate in play).
-            if let spaceFor = _spaceForWindow {
-                let postMove = spaceFor(cid, wid)
-                if postMove == target { landed.append(wid) }
-                else { stuck.append(wid) }
+            let postMove = spaceFor(cid, wid)
+            if postMove == target {
+                landed.append(wid)
             } else {
-                landed.append(wid)   // optimistic; verify on next pass
+                stuck.append(wid)
             }
         }
 
-        let havePost = (_spaceForWindow != nil)
         BoundSpaceTrace.emit(
             "relocateWindows pid=\(pid) target=\(target) " +
-            "attempted=\(attempted.count) " +
-            "landed=\(landed.count) stuck=\(stuck.count) " +
-            "havePostClassification=\(havePost) " +
-            "haveRemove=\(_removeWindowsFromSpaces != nil)"
+            "attempted=\(attempted.count) landed=\(landed.count) stuck=\(stuck.count)"
         )
         return RelocateResult(attempted: attempted, landed: landed, stuck: stuck)
     }

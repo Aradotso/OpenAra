@@ -412,71 +412,8 @@ public final class ComputerUseService {
             return snapshotResult(for: try refreshSnapshot(for: query), style: .actionResult)
         }
 
-        // **Window-creating-keystroke wrap.** When the agent presses
-        // a combo that typically creates a new window (Cmd+N,
-        // Cmd+T, Cmd+Shift+N) and bound-space mode is active, wrap
-        // the keystroke in withBoundSpace so the new window is born
-        // during the flipped bookkeeping — placing it on the bound
-        // space just like our openApplication path does.
-        //
-        // Why this is needed: when a single-instance app like
-        // Finder is already running on the user's space and the
-        // agent says "open finder", the LLM dispatches to
-        // press_key Cmd+N (NOT openApplication), so our launch-time
-        // silent-flip never fires. Without this wrap, the new
-        // Finder window appears on the user's space.
-        let pid = snapshot.app.pid
-        if BoundSpaceManager.shared.isActive,
-           Self.isWindowCreatingKey(key)
-        {
-            BoundSpaceTrace.emit(
-                "pressKey.wrap-in-bound-space app=\(snapshot.app.name) " +
-                "pid=\(pid) key=\(key)"
-            )
-            let sema = DispatchSemaphore(value: 0)
-            let errorBox = PressKeyErrorBox()
-            Task {
-                await BoundSpaceManager.shared.withBoundSpace {
-                    do {
-                        try InputSimulation.pressKey(key, pid: pid)
-                    } catch {
-                        errorBox.error = error
-                        return
-                    }
-                    // Settle while bookkeeping is still bound so the
-                    // newly-created window has time to commit to the
-                    // bound space before withBoundSpace's outer
-                    // restore fires.
-                    try? await Task.sleep(nanoseconds: 800_000_000)
-                }
-                sema.signal()
-            }
-            sema.wait()
-            if let error = errorBox.error { throw error }
-        } else {
-            try InputSimulation.pressKey(key, pid: pid)
-        }
-
+        try InputSimulation.pressKey(key, pid: snapshot.app.pid)
         return snapshotResult(for: try refreshSnapshot(for: query), style: .actionResult)
-    }
-
-    /// Whether the given KeyPressParser-style spec is one of the
-    /// canonical "create a new window" combos. Conservative list —
-    /// we only wrap keystrokes we're confident create windows so
-    /// the cost (each press_key adds ~2.6s for the silent-flip)
-    /// is paid only when there's a real benefit.
-    private static func isWindowCreatingKey(_ key: String) -> Bool {
-        let normalized = key.lowercased().replacingOccurrences(of: " ", with: "")
-        let creators: Set<String> = [
-            "super+n", "cmd+n", "command+n",     // New Window / New Document
-            "super+t", "cmd+t", "command+t",     // New Tab (creates window in some apps)
-            "super+shift+n", "cmd+shift+n", "command+shift+n",  // New Folder / New Incognito
-        ]
-        return creators.contains(normalized)
-    }
-
-    private final class PressKeyErrorBox: @unchecked Sendable {
-        var error: Error?
     }
 
     public func setValue(app query: String, elementIndex: String, value: String) throws -> ToolCallResult {
@@ -525,13 +462,10 @@ public final class ComputerUseService {
 
     private func currentSnapshot(for query: String) throws -> AppSnapshot {
         if let snapshot = snapshotsByApp[query.lowercased()] {
-            enforceBoundSpace(for: snapshot.app.pid)
             return snapshot
         }
 
-        let fresh = try refreshSnapshot(for: query)
-        enforceBoundSpace(for: fresh.app.pid)
-        return fresh
+        return try refreshSnapshot(for: query)
     }
 
     @discardableResult
@@ -550,55 +484,6 @@ public final class ComputerUseService {
         }
 
         return snapshot
-    }
-
-    /// "Always try to move it" — every tool call that resolves a
-    /// snapshot for an app passes through this. If bound-space mode
-    /// is active and the target pid's windows are NOT on the bound
-    /// space, attempt to relocate them via the SkyLight
-    /// add/remove-from-spaces pair we already shipped in
-    /// BoundSpaceManager.
-    ///
-    /// **Why this is "best-effort and idempotent".** SLSAddWindowsToSpaces
-    /// is gated by the connection-holds-rights-on-window SIP check
-    /// when applied to windows we don't own. Apps we own (or have AX
-    /// rights to) tend to relocate cleanly; foreign-owned windows
-    /// often silently no-op. We always try anyway because:
-    ///   1. It's cheap (one CGWindowList scan + a few SLS calls).
-    ///   2. Idempotent — already-on-bound returns early.
-    ///   3. When it works, it fixes the agent's working surface
-    ///      without any visible disruption.
-    ///   4. When it no-ops, the trace tells us so for the same cost.
-    ///
-    /// **When is this triggered.** Every tool call (click, press_key,
-    /// type_text, get_app_state, etc.) calls currentSnapshot, which
-    /// calls this. After the agent's first `press_key Cmd+N` for
-    /// Finder, the resulting Finder window appears on the user's
-    /// space. The agent's NEXT tool call (typically a get_app_state
-    /// or click to operate on that window) goes through this
-    /// enforcement step and the window gets pulled to the bound
-    /// space.
-    private func enforceBoundSpace(for pid: pid_t) {
-        guard let target = BoundSpaceManager.shared.boundSpaceId,
-              BoundSpaceManager.shared.isActive
-        else { return }
-
-        let observed = BoundSpaceManager.shared.spaceIdsForPid(pid)
-        if observed.contains(target) {
-            BoundSpaceTrace.emit(
-                "enforce-bound-space.already-correct pid=\(pid) target=\(target) " +
-                "observed=\(observed.map(String.init).joined(separator: ","))"
-            )
-            return
-        }
-
-        let result = BoundSpaceManager.shared.relocateWindows(of: pid, to: target)
-        BoundSpaceTrace.emit(
-            "enforce-bound-space.relocate pid=\(pid) target=\(target) " +
-            "attempted=\(result.attempted.count) " +
-            "landed=\(result.landed.count) stuck=\(result.stuck.count) " +
-            "observedBefore=\(observed.map(String.init).joined(separator: ","))"
-        )
     }
 
     private func lookupElement(snapshot: AppSnapshot, index: String) throws -> ElementRecord {
