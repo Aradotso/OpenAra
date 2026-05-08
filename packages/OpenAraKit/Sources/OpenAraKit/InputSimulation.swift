@@ -49,7 +49,56 @@ enum InputSimulation {
             return
         }
 
-        // AX raise failed. The fallback (`runningApplication.activate`) yanks
+        // AX raise failed. Before reaching for the foreground-stealing
+        // `runningApplication.activate`, try the silent path: if the
+        // target's windows live on the bound Ara workspace AND
+        // PerPidFocus is enabled, post the yabai
+        // SLPSPostEventRecordTo pair to make the app key-focused
+        // without raising any window. The user's screen never moves
+        // and AppKit-gated input (text fields, table selection)
+        // accepts our subsequent events.
+        //
+        // Strictly gated: the window must live on the bound space
+        // (not the user's active space). Without this gate, focus-
+        // without-raise on a user-visible window still steals key
+        // focus from whatever they're typing into — same disruption,
+        // different mechanism.
+        if let target = BoundSpaceManager.shared.boundSpaceId,
+           BoundSpaceManager.shared.isActive,
+           PerPidFocus.shared.isAvailable
+        {
+            let pidSpaces = BoundSpaceManager.shared.spaceIdsForPid(app.pid)
+            // Strict gate: the app must have at least one window on
+            // the bound space AND no windows on the user's currently-
+            // visible space. The earlier `contains(target)` check let
+            // through apps that had windows on BOTH spaces — for
+            // those, focus-without-raise would still steal key focus
+            // from a user-visible window of the same pid. We resolve
+            // the user's current space via BoundSpaceManager and
+            // require disjointness from {currentSpace}.
+            let isOnBound = pidSpaces.contains(target)
+            let currentSpace = BoundSpaceManager.shared.currentSpace()
+            let isOnUserView = currentSpace.map { pidSpaces.contains($0) && $0 != target } ?? false
+            if isOnBound && !isOnUserView {
+                // Target a specific window on the bound space rather
+                // than relying on the per-pid "current key window"
+                // (which may be one of the app's user-space windows
+                // when it has windows on multiple spaces). Picks the
+                // first window owned by the pid that lives on the
+                // bound space.
+                let windowID = BoundSpaceManager.shared.firstWindowID(of: app.pid, on: target)
+                if PerPidFocus.shared.makeKeyWithoutRaising(pid: app.pid, windowID: windowID) {
+                    Thread.sleep(forTimeInterval: 0.12)
+                    return
+                }
+                // PerPidFocus tried and reported failure (symbol
+                // returned non-zero). Fall through to the focus-steal
+                // gate below — if the user opted in, we'll activate;
+                // otherwise we skip and the agent retries via AX.
+            }
+        }
+
+        // The fallback (`runningApplication.activate`) yanks
         // foreground focus away from whatever the user is doing, which breaks
         // the README promise that "you keep using your computer while the
         // agent works." Gate it behind an explicit opt-in so the default

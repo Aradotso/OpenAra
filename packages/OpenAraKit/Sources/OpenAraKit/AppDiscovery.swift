@@ -313,6 +313,40 @@ enum AppDiscovery {
             "isBoundActive=\(isBoundActive) boundSpaceId=\(boundId)"
         )
 
+        // Reused-instance reconcile: if the bound-space mode is active
+        // and there's already a running instance of this bundle whose
+        // windows live somewhere other than the bound space, try to
+        // move them in place. If the move no-ops (typical on full SIP
+        // for windows we don't own) AND the bundle is on the relaunch
+        // allow-list, terminate the existing instance so the upcoming
+        // `withBoundSpace` launch creates a fresh one on the bound
+        // space. Bundles NOT on the allow-list are left alone — we
+        // accept that the agent will reuse the existing window on the
+        // user's space (verify line will log match=false).
+        if isBoundActive,
+           let bid = Bundle(url: appURL)?.bundleIdentifier,
+           let target = BoundSpaceManager.shared.boundSpaceId
+        {
+            do {
+                try reconcileSpaceMembership(bundleId: bid, target: target)
+            } catch ReconcileOutcome.alreadyPlaced {
+                // Reconcile pinned the existing windows to the bound
+                // space; no launch needed. Still emit a verify line
+                // so trace diff between launches and reconciles is
+                // easy to spot.
+                let observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+                let observedStr = observed.map(String.init).joined(separator: ",")
+                let matched = observed.contains(target)
+                BoundSpaceTrace.emit(
+                    "openApplication.verify (reconcile-only) " +
+                    "app=\(appName) bundleId=\(bid) " +
+                    "windowSpaces=\(observedStr) boundSpaceId=\(boundId) " +
+                    "match=\(matched)"
+                )
+                return
+            }
+        }
+
         if isBoundActive {
             // Per-thread Mission Control space (host opt-in via
             // `OPENARA_BOUND_SPACE_ID`): wrap the launch in a silent
@@ -337,6 +371,20 @@ enum AppDiscovery {
                     // host (Ara) handles those cases separately if it
                     // wants stronger isolation.
                     configuration.createsNewApplicationInstance = true
+                    // Known-issue note: a brief visible-flash on the
+                    // user's space during cold launch was tracked but
+                    // not eliminated. Tried `configuration.hides=true`
+                    // (ignored by macOS Tahoe for fresh launches —
+                    // NSRunningApplication.unhide returns false) and
+                    // post-callback `app.hide()` (also returns false
+                    // because the app's NSApplication main loop
+                    // hasn't started yet at process-spawn time). The
+                    // window is correctly placed on the bound space
+                    // after the silent-flip restores; only the
+                    // ~100-300ms creation-frame is briefly visible to
+                    // the user. See PR description for details and
+                    // possible follow-ups (poll-for-isFinishedLaunching,
+                    // AX-level window pinning).
                     let innerSema = DispatchSemaphore(value: 0)
                     NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { runningApp, error in
                         errorBox.error = error
@@ -378,8 +426,24 @@ enum AppDiscovery {
         // app's window(s) ended up. Lets the operator confirm "did
         // Calculator land on the Ara desktop or not" without manually
         // swiping through Mission Control.
+        //
+        // Poll-with-deadline pattern: live testing on Tahoe 26.4 found
+        // that Calculator's first-launch can take >1.5s for the window
+        // to register in `CGWindowListCopyWindowInfo`, even though the
+        // process is spawned and reported back via openApplication's
+        // callback at ~270ms. Without polling we'd consistently log
+        // `windowSpaces= match=false` for cold launches even though
+        // the window does appear (and on the correct space) shortly
+        // after — false alarm. Poll up to 4s, exit early on first
+        // non-empty list. Total cost is bounded; happy-path is fast.
         if let bid = Bundle(url: appURL)?.bundleIdentifier {
-            let observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+            var observed: [UInt64] = []
+            let verifyDeadline = Date().addingTimeInterval(4.0)
+            while Date() < verifyDeadline {
+                observed = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bid)
+                if !observed.isEmpty { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
             let observedStr = observed.map(String.init).joined(separator: ",")
             let bound = BoundSpaceManager.shared.boundSpaceId
             let matched: Bool = bound.map { observed.contains($0) } ?? false
@@ -392,6 +456,107 @@ enum AppDiscovery {
                 "match=\(matched)",
             ]
             BoundSpaceTrace.emit(parts.joined(separator: " "))
+        }
+    }
+
+    /// Pre-launch space reconciliation. Decides whether the existing
+    /// running instance of `bundleId` (if any) needs to be moved or
+    /// killed before the upcoming `withBoundSpace` launch.
+    ///
+    /// Decision tree:
+    ///   * No running instance → no-op, fall through to launch.
+    ///   * Running instance with at least one window on `target` →
+    ///     no-op (already correct).
+    ///   * Running instance entirely off `target`:
+    ///     * try `BoundSpaceManager.relocateWindows`. If `allLanded`,
+    ///       skip the launch entirely — the windows are now on the
+    ///       bound space. Log `reconcile.pinned`.
+    ///     * If relocate left windows stuck AND the bundle is on the
+    ///       relaunch allow-list, `terminate()` every running
+    ///       instance, wait up to 2s for `isTerminated`, then return
+    ///       so the caller proceeds with launch-under-flip. Log
+    ///       `reconcile.relaunched`.
+    ///     * Otherwise, log `reconcile.locked` and return — the agent
+    ///       will reuse the existing window on the user's space.
+    ///       Acceptable for apps with unsaved-state risk (Mail,
+    ///       Messages).
+    private static func reconcileSpaceMembership(
+        bundleId: String,
+        target: UInt64
+    ) throws {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        guard !running.isEmpty else {
+            BoundSpaceTrace.emit("reconcile.skip bundleId=\(bundleId) reason=not-running")
+            return
+        }
+
+        let currentSpaces = BoundSpaceManager.shared.spaceIdsForApp(bundleIdentifier: bundleId)
+        if currentSpaces.contains(target) {
+            BoundSpaceTrace.emit(
+                "reconcile.already-correct bundleId=\(bundleId) " +
+                "currentSpaces=\(currentSpaces.map(String.init).joined(separator: ","))"
+            )
+            return
+        }
+
+        // Try cheap, in-place move first.
+        var anyLanded = false
+        var anyStuck = false
+        for app in running {
+            let result = BoundSpaceManager.shared.relocateWindows(
+                of: app.processIdentifier,
+                to: target
+            )
+            if !result.landed.isEmpty { anyLanded = true }
+            if !result.stuck.isEmpty { anyStuck = true }
+        }
+
+        if anyLanded && !anyStuck {
+            BoundSpaceTrace.emit(
+                "reconcile.pinned bundleId=\(bundleId) skipping launch"
+            )
+            // Throw a sentinel that the caller catches as "we're done,
+            // no launch needed."
+            throw ReconcileOutcome.alreadyPlaced
+        }
+
+        // Move was a partial or full no-op. Decide whether to kill +
+        // relaunch based on the per-bundle policy.
+        let policy = AppRelaunchPolicy.policy(for: bundleId)
+        switch policy {
+        case .allow:
+            BoundSpaceTrace.emit(
+                "reconcile.relaunching bundleId=\(bundleId) " +
+                "policy=allow runningCount=\(running.count)"
+            )
+            for app in running {
+                _ = app.terminate()
+            }
+            // Wait up to 2s for every instance to terminate before we
+            // hand control back to the launch path. Avoids the new
+            // launch racing the old instance and reusing it again.
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline,
+                  !NSRunningApplication
+                    .runningApplications(withBundleIdentifier: bundleId)
+                    .isEmpty
+            {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            let stillRunning = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleId)
+                .count
+            BoundSpaceTrace.emit(
+                "reconcile.relaunched bundleId=\(bundleId) " +
+                "stillRunning=\(stillRunning)"
+            )
+
+        case .deny:
+            BoundSpaceTrace.emit(
+                "reconcile.locked bundleId=\(bundleId) " +
+                "policy=deny landed=\(anyLanded) stuck=\(anyStuck) " +
+                "expect=verify-will-log-match=false"
+            )
         }
     }
 
@@ -562,6 +727,44 @@ enum AppDiscovery {
         private static func dateAttribute(_ name: CFString, item: MDItem) -> Date? {
             MDItemCopyAttribute(item, name) as? Date
         }
+    }
+}
+
+/// Sentinel thrown by `reconcileSpaceMembership` when the relocate
+/// path succeeded and the launch should be skipped entirely. Caught by
+/// `openApplication` so the user sees the same `verify` log line as if
+/// the launch had succeeded — just without spawning a new process.
+private enum ReconcileOutcome: Error {
+    case alreadyPlaced
+}
+
+/// Per-bundle policy gate for the "kill + relaunch" branch of the
+/// reused-instance reconciler. Default is `.deny` — we only relaunch
+/// the apps where unsaved-state risk is essentially zero AND macOS
+/// silently coerces `createsNewApplicationInstance` to false.
+///
+/// Allow-list rationale (see plan in PR description):
+///   * Calculator, Notes, Stickies, Preview, TextEdit — single-instance
+///     by macOS contract, document state is auto-saved or trivial.
+/// Deliberately NOT on the allow-list:
+///   * Mail / Messages — in-progress compose, draft loss is bad.
+///   * iWork (Pages/Numbers/Keynote) — unsaved document risk.
+///   * Anything not enumerated — opt-in policy. New entries go through
+///     code review.
+private enum AppRelaunchPolicy {
+    case allow
+    case deny
+
+    private static let allowed: Set<String> = [
+        "com.apple.calculator",
+        "com.apple.Notes",
+        "com.apple.Stickies",
+        "com.apple.Preview",
+        "com.apple.TextEdit",
+    ]
+
+    static func policy(for bundleId: String) -> AppRelaunchPolicy {
+        allowed.contains(bundleId) ? .allow : .deny
     }
 }
 
