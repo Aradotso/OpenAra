@@ -328,7 +328,7 @@ enum AppDiscovery {
            let target = BoundSpaceManager.shared.boundSpaceId
         {
             do {
-                try reconcileSpaceMembership(bundleId: bid, target: target, appName: appName)
+                try reconcileSpaceMembership(bundleId: bid, target: target)
             } catch ReconcileOutcome.alreadyPlaced {
                 // Reconcile pinned the existing windows to the bound
                 // space; no launch needed. Still emit a verify line
@@ -482,8 +482,7 @@ enum AppDiscovery {
     ///       Messages).
     private static func reconcileSpaceMembership(
         bundleId: String,
-        target: UInt64,
-        appName: String
+        target: UInt64
     ) throws {
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
         guard !running.isEmpty else {

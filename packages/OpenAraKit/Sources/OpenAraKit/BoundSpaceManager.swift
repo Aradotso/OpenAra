@@ -116,6 +116,18 @@ public final class BoundSpaceManager: @unchecked Sendable {
         return CFUUIDCreateString(nil, cf)
     }
 
+    /// Read the current bookkeeping space — used by callers that need
+    /// to know "where is the user looking right now?" without going
+    /// through `withBoundSpace`. Returns nil when SkyLight symbols
+    /// haven't resolved (i.e. inactive mode).
+    public func currentSpace() -> UInt64? {
+        guard isActive,
+              let getCurrent = _getCurrentSpace,
+              let uuid = mainDisplayUUID
+        else { return nil }
+        return getCurrent(cid, uuid)
+    }
+
     /// Run `body` with WindowServer's bookkeeping current-space
     /// temporarily set to the host-bound space, then hold the flip
     /// for `windowSettleNanos` after `body` returns so the launched
@@ -290,6 +302,26 @@ public final class BoundSpaceManager: @unchecked Sendable {
             "attempted=\(attempted.count) landed=\(landed.count) stuck=\(stuck.count)"
         )
         return RelocateResult(attempted: attempted, landed: landed, stuck: stuck)
+    }
+
+    /// First on-screen window owned by `pid` whose CGSSpaceID equals
+    /// `space`, or nil. Used by `InputSimulation` to bake a specific
+    /// window-on-the-bound-space into the SLPSPostEventRecordTo event
+    /// record so focus-without-raise targets the right window when
+    /// the app has windows on multiple spaces.
+    public func firstWindowID(of pid: pid_t, on space: UInt64) -> CGWindowID? {
+        guard let spaceFor = _spaceForWindow else { return nil }
+        let opts: CGWindowListOption = [.optionAll, .excludeDesktopElements]
+        guard let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else { return nil }
+        for entry in info {
+            guard let ownerNum = entry[kCGWindowOwnerPID as String] as? NSNumber,
+                  ownerNum.int32Value == pid,
+                  let widNum = entry[kCGWindowNumber as String] as? NSNumber
+            else { continue }
+            let wid = widNum.uint32Value
+            if spaceFor(cid, wid) == space { return CGWindowID(wid) }
+        }
+        return nil
     }
 
     /// Same as `spaceIdsForApp` but keyed by pid.

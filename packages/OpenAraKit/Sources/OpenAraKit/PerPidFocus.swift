@@ -153,33 +153,51 @@ public final class PerPidFocus: @unchecked Sendable {
         //   byte 0x08 = 0x01 then 0x02 across the two calls
         //   bytes 0x20..0x30 = 0xff (sentinel; required, but specific
         //                            content untouched between calls)
-        //   byte 0x3a = 0x10
+        //   byte 0x3a = 0x10  ← only set when we have a windowID;
+        //                       without one, leaving 0x3c..0x3f as
+        //                       zero (kCGNullWindowID) WITH the
+        //                       0x10 record-type sentinel produces a
+        //                       malformed event record per yabai's
+        //                       implementation. When we don't have a
+        //                       windowID, fall back to the non-window-
+        //                       targeted record shape (no 0x3a, no
+        //                       window-id bytes).
         //   bytes 0x3c..0x40 = window_id (UInt32, little-endian)
-        var buf = [UInt8](repeating: 0, count: 0xf8)
-        buf[0x04] = 0xf8
-        buf[0x3a] = 0x10
-        if let wid = windowID {
-            withUnsafeBytes(of: wid.littleEndian) { src in
-                for (i, byte) in src.enumerated() {
-                    buf[0x3c + i] = byte
+        //
+        // Use TWO separate buffers — one per call. yabai mutates a
+        // single static buffer between calls because the only diff is
+        // byte 0x08, but per @cubic-dev-ai's pass we want each call
+        // to see a freshly-prepared record so a future change that
+        // adds more diff between the two records doesn't accidentally
+        // contaminate the second call with leftover state from the
+        // first.
+        func makeRecord(stage: UInt8) -> [UInt8] {
+            var buf = [UInt8](repeating: 0, count: 0xf8)
+            buf[0x04] = 0xf8
+            buf[0x08] = stage
+            for i in 0..<0x10 { buf[0x20 + i] = 0xff }
+            if let wid = windowID {
+                buf[0x3a] = 0x10
+                withUnsafeBytes(of: wid.littleEndian) { src in
+                    for (i, byte) in src.enumerated() {
+                        buf[0x3c + i] = byte
+                    }
                 }
             }
-        }
-        for i in 0..<0x10 {
-            buf[0x20 + i] = 0xff
+            return buf
         }
 
         // First call — activate-style.
-        buf[0x08] = 0x01
-        let r1 = buf.withUnsafeMutableBufferPointer { bp -> Int32 in
+        var buf1 = makeRecord(stage: 0x01)
+        let r1 = buf1.withUnsafeMutableBufferPointer { bp -> Int32 in
             post(&psn, bp.baseAddress!)
         }
 
         // Second call — commit-style. Both go to the SAME target PSN,
         // not "previously-frontmost then target" as the trycua blog
         // claims. Verified against yabai source.
-        buf[0x08] = 0x02
-        let r2 = buf.withUnsafeMutableBufferPointer { bp -> Int32 in
+        var buf2 = makeRecord(stage: 0x02)
+        let r2 = buf2.withUnsafeMutableBufferPointer { bp -> Int32 in
             post(&psn, bp.baseAddress!)
         }
 

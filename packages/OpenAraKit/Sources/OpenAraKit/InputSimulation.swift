@@ -68,8 +68,26 @@ enum InputSimulation {
            PerPidFocus.shared.isAvailable
         {
             let pidSpaces = BoundSpaceManager.shared.spaceIdsForPid(app.pid)
-            if pidSpaces.contains(target) {
-                if PerPidFocus.shared.makeKeyWithoutRaising(pid: app.pid) {
+            // Strict gate: the app must have at least one window on
+            // the bound space AND no windows on the user's currently-
+            // visible space. The earlier `contains(target)` check let
+            // through apps that had windows on BOTH spaces — for
+            // those, focus-without-raise would still steal key focus
+            // from a user-visible window of the same pid. We resolve
+            // the user's current space via BoundSpaceManager and
+            // require disjointness from {currentSpace}.
+            let isOnBound = pidSpaces.contains(target)
+            let currentSpace = BoundSpaceManager.shared.currentSpace()
+            let isOnUserView = currentSpace.map { pidSpaces.contains($0) && $0 != target } ?? false
+            if isOnBound && !isOnUserView {
+                // Target a specific window on the bound space rather
+                // than relying on the per-pid "current key window"
+                // (which may be one of the app's user-space windows
+                // when it has windows on multiple spaces). Picks the
+                // first window owned by the pid that lives on the
+                // bound space.
+                let windowID = BoundSpaceManager.shared.firstWindowID(of: app.pid, on: target)
+                if PerPidFocus.shared.makeKeyWithoutRaising(pid: app.pid, windowID: windowID) {
                     Thread.sleep(forTimeInterval: 0.12)
                     return
                 }
